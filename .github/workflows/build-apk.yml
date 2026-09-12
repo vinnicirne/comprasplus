@@ -5,6 +5,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Compilar APK Android
@@ -18,12 +21,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
 
-      - name: Instalar Dependências
-        run: npm ci
+      - name: Instalar Dependências Node
+        run: npm install
 
-      - name: Preparar Assets Web
+      - name: Preparar Assets Web (www)
         run: |
           node scripts/generate-env.js
           node scripts/prepare-www.js
@@ -34,45 +36,47 @@ jobs:
           distribution: 'temurin'
           java-version: 17
 
-      - name: Configurar Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Sincronizar Capacitor Android
+      - name: Instalar e Sincronizar Capacitor Android
         run: |
           npx cap add android || true
           npx cap sync android
 
-      - name: Dar permissão de execução ao Gradlew
+      - name: Dar permissão de execução ao Gradle Wrapper
         run: chmod +x android/gradlew
 
-      - name: Compilar APK (Debug)
+      - name: Compilar APK Android (Debug)
         run: |
           cd android
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleDebug --no-daemon --stacktrace
 
-      - name: Encontrar e Renomear APK
+      - name: Organizar Arquivo APK Final
         run: |
           mkdir -p output-apk
-          cp android/app/build/outputs/apk/debug/app-debug.apk output-apk/ListaDeComprasPlus.apk
-          echo "APK gerado em output-apk/ListaDeComprasPlus.apk"
+          APK_PATH=$(find android/app/build/outputs/apk -name "*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "Erro: APK não encontrado!"
+            exit 1
+          fi
+          echo "APK encontrado em: $APK_PATH"
+          cp "$APK_PATH" output-apk/ListaDeComprasPlus.apk
 
-      - name: Fazer Upload do APK como Artefato
+      - name: Publicar APK como Artefato para Download
         uses: actions/upload-artifact@v4
         with:
           name: ListaDeComprasPlus-APK
           path: output-apk/ListaDeComprasPlus.apk
           retention-days: 30
 
-      - name: Criar Release no GitHub (opcional)
+      - name: Criar Release no GitHub com Download Direto
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
           name: "Lista de Compras Plus v1.0.${{ github.run_number }} (APK)"
           body: |
-            🎉 **Nova versão do aplicativo Lista de Compras Plus**
+            🎉 **APK Android Gerado com Sucesso!**
             
-            📱 Baixe o arquivo APK anexo para instalar no seu celular Android.
+            📱 Baixe o arquivo `ListaDeComprasPlus.apk` anexo abaixo para instalar diretamente no seu celular Android.
           files: output-apk/ListaDeComprasPlus.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
