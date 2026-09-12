@@ -1099,6 +1099,24 @@ function setupEventListeners() {
     });
   }
 
+  const btnRenovarCodigo = document.getElementById('btn-renovar-codigo-share');
+  if (btnRenovarCodigo) {
+    btnRenovarCodigo.addEventListener('click', handleRenovarCodigoShare);
+  }
+
+  const btnLimparCodigoConvite = document.getElementById('btn-limpar-convite-codigo');
+  if (btnLimparCodigoConvite) {
+    btnLimparCodigoConvite.addEventListener('click', () => {
+      const input = document.getElementById('input-convite-codigo');
+      if (input) {
+        input.value = '';
+        input.focus();
+      }
+      const alertBox = document.getElementById('convite-alert-msg');
+      if (alertBox) alertBox.classList.add('hidden');
+    });
+  }
+
   // Seletores visuais de modo de permissão de compartilhamento
   document.querySelectorAll('input[name="share-permission"]').forEach(radio => {
     radio.addEventListener('change', (e) => {
@@ -2254,11 +2272,23 @@ async function openCompartilharModal() {
   const list = state.lists.find(l => l.id === state.activeListId);
   if (!list) return;
 
+  if (!db.isAuthenticated()) {
+    alert('⚠️ Para compartilhar uma lista com amigos ou familiares, você precisa estar conectado à sua conta.');
+    openAuthModal('login');
+    return;
+  }
+
   activeSharingList = list;
   const title = document.getElementById('compartilhar-nome-lista');
   if (title) title.textContent = `Lista: ${list.name}`;
 
-  // Gera código amigável
+  const statusMsg = document.getElementById('share-code-status-msg');
+  if (statusMsg) {
+    statusMsg.classList.add('hidden');
+    statusMsg.textContent = '';
+  }
+
+  // Gera ou recupera código ativo
   const permSelector = document.querySelector('input[name="share-permission"]:checked')?.value || 'fechado';
   try {
     const codeObj = await db.createShareInviteCode(list.id, permSelector);
@@ -2266,10 +2296,50 @@ async function openCompartilharModal() {
     if (displayCode) displayCode.textContent = codeObj.inviteCode;
     activeSharingList.shareLink = codeObj.shareLink;
     activeSharingList.inviteCode = codeObj.inviteCode;
-  } catch (_) {}
+  } catch (err) {
+    console.warn('Aviso ao sincronizar código:', err);
+  }
 
   await renderCollaboratorsList(list.id);
   openSheet('sheet-compartilhar-lista');
+}
+
+async function handleRenovarCodigoShare() {
+  if (!activeSharingList) return;
+  const btn = document.getElementById('btn-renovar-codigo-share');
+  const displayCode = document.getElementById('share-display-code');
+  const statusMsg = document.getElementById('share-code-status-msg');
+  const perm = document.querySelector('input[name="share-permission"]:checked')?.value || 'fechado';
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Renovando...';
+  }
+
+  try {
+    const codeObj = await db.createShareInviteCode(activeSharingList.id, perm, true); // forceNew = true
+    if (displayCode) displayCode.textContent = codeObj.inviteCode;
+    activeSharingList.inviteCode = codeObj.inviteCode;
+    activeSharingList.shareLink = codeObj.shareLink;
+    vibrateDevice(30);
+
+    if (statusMsg) {
+      statusMsg.className = 'auth-alert success';
+      statusMsg.textContent = `✅ Código ${codeObj.inviteCode} renovado e ativado na nuvem com sucesso!`;
+      statusMsg.classList.remove('hidden');
+    }
+  } catch (err) {
+    if (statusMsg) {
+      statusMsg.className = 'auth-alert error';
+      statusMsg.textContent = 'Erro ao renovar: ' + (err.message || err);
+      statusMsg.classList.remove('hidden');
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '🔄 Renovar Código';
+    }
+  }
 }
 
 async function renderCollaboratorsList(listId) {

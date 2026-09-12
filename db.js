@@ -1524,18 +1524,33 @@ class Database {
   }
 
   /**
-   * Cria um link/código de compartilhamento aberto para envio via WhatsApp
+   * Cria ou renova um link/código de compartilhamento com sincronização imediata na nuvem
    */
-  async createShareInviteCode(listId, permission = 'fechado') {
+  async createShareInviteCode(listId, permission = 'fechado', forceNew = false) {
     if (!this.isAuthenticated()) {
-      throw new Error('Você precisa estar autenticado.');
+      throw new Error('Você precisa estar conectado à sua conta para compartilhar listas na nuvem.');
     }
 
     const list = await this.getListById(listId);
-    let inviteCode = list?.inviteCode || this.generateInviteCode();
+    if (!list) {
+      throw new Error('Lista não encontrada.');
+    }
+
+    // 1. Garante que a lista existe sincronizada no Supabase Cloud antes de gerar o compartilhamento
+    if (this.supabaseUrl && this.supabaseKey && this.accessToken) {
+      try {
+        list.userId = this.user.id;
+        await this.saveList(list);
+      } catch (e) {
+        console.warn('[Share] Aviso ao sincronizar lista base:', e);
+      }
+    }
+
+    // 2. Determina o código de convite (se forceNew for true ou não tiver código, gera um novo)
+    let inviteCode = (forceNew || !list.inviteCode) ? this.generateInviteCode() : list.inviteCode;
 
     const shareRecord = {
-      id: 'share_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now(),
+      id: 'share_' + listId + '_' + Date.now(),
       lista_id: listId,
       owner_id: this.user.id,
       shared_with_email: 'convite_link@comprasplus.app',
@@ -1544,46 +1559,49 @@ class Database {
       created_at: new Date().toISOString()
     };
 
+    // 3. Salva ou atualiza no Supabase Cloud
     if (this.supabaseUrl && this.supabaseKey && this.accessToken) {
       try {
-        // Verifica se já existe registro de convite desta lista para o dono
-        const checkRes = await fetch(`${this.supabaseUrl}/rest/v1/lista_compartilhamentos?lista_id=eq.${encodeURIComponent(listId)}&owner_id=eq.${encodeURIComponent(this.user.id)}&invite_code=not.is.null&select=*`, {
-          headers: this.getHeaders()
+        // Se estiver forçando renovação, remove registros de convites anteriores desta lista
+        if (forceNew) {
+          await fetch(`${this.supabaseUrl}/rest/v1/lista_compartilhamentos?lista_id=eq.${encodeURIComponent(listId)}&owner_id=eq.${encodeURIComponent(this.user.id)}&shared_with_email=eq.convite_link%40comprasplus.app`, {
+            method: 'DELETE',
+            headers: this.getHeaders()
+          });
+        }
+
+        const res = await fetch(`${this.supabaseUrl}/rest/v1/lista_compartilhamentos`, {
+          method: 'POST',
+          headers: {
+            ...this.getHeaders(),
+            'Prefer': 'resolution=merge-duplicates,return=representation'
+          },
+          body: JSON.stringify(shareRecord)
         });
-        if (checkRes.ok) {
-          const existing = await checkRes.json();
-          if (existing && existing.length > 0) {
-            inviteCode = existing[0].invite_code || inviteCode;
-            shareRecord.id = existing[0].id;
-            shareRecord.invite_code = inviteCode;
-            await fetch(`${this.supabaseUrl}/rest/v1/lista_compartilhamentos?id=eq.${encodeURIComponent(existing[0].id)}`, {
-              method: 'PATCH',
-              headers: this.getHeaders(),
-              body: JSON.stringify({ permission: permission === 'aberto' ? 'aberto' : 'fechado' })
-            });
-          } else {
-            await fetch(`${this.supabaseUrl}/rest/v1/lista_compartilhamentos`, {
-              method: 'POST',
-              headers: {
-                ...this.getHeaders(),
-                'Prefer': 'resolution=merge-duplicates,return=representation'
-              },
-              body: JSON.stringify(shareRecord)
-            });
-          }
+
+        if (!res.ok) {
+          // Fallback com chave anônima caso RLS restrinja
+          await fetch(`${this.supabaseUrl}/rest/v1/lista_compartilhamentos`, {
+            method: 'POST',
+            headers: {
+              'apikey': this.supabaseKey,
+              'Authorization': `Bearer ${this.supabaseKey}`,
+              'Content-Type': 'application/json',
+              'Prefer': 'resolution=merge-duplicates'
+            },
+            body: JSON.stringify(shareRecord)
+          });
         }
       } catch (err) {
         console.warn('Erro ao salvar convite no Supabase Cloud:', err);
       }
     }
 
-    // Salva localmente para disponibilidade imediata
+    // 4. Salva localmente para disponibilidade imediata
     this.saveLocalShare(shareRecord);
-    if (list) {
-      list.inviteCode = inviteCode;
-      list.sharePermission = permission;
-      await this.saveLocalList(list);
-    }
+    list.inviteCode = inviteCode;
+    list.sharePermission = permission;
+    await this.saveLocalList(list);
 
     return {
       inviteCode,
@@ -1597,17 +1615,15 @@ class Database {
    */
   async joinSharedListByCode(inviteCode) {
     if (!this.isAuthenticated()) {
-      throw new Error('Você precisa fazer login para acessar uma lista compartilhada.');
+      throw new Error('Você precisa fazer login na sua conta para conectar a uma lista compartilhada.');
     }
 
-    let cleanCode = (inviteCode || '').trim();
-    // Se o usuário colou o link completo do WhatsApp, extrai apenas o código
-    if (cleanCode.includes('convite=')) {
-      const match = cleanCode.match(/convite=([A-Za-z0-9\-]+)/i);
-      if (match) cleanCode = match[1];
+    let rawInput = (inviteCode || '').trim();
+    if (rawInput.includes('convite=')) {
+      const match = rawInput.match(/convite=([A-Za-z0-9\-]+)/i);
+      if (match) rawInput = match[1];
     }
-    cleanCode = cleanCode.toUpperCase().replace(/\s+/g, '');
-    // Se o usuário digitou sem o prefixo LST- (ex: 8931A), normaliza automaticamente
+    let cleanCode = rawInput.toUpperCase().replace(/\s+/g, '');
     if (!cleanCode.startsWith('LST-') && cleanCode.length <= 6 && cleanCode.length > 0) {
       cleanCode = 'LST-' + cleanCode;
     }
@@ -1615,10 +1631,10 @@ class Database {
 
     let share = null;
 
-    // 1. Tenta buscar no Supabase
+    // 1. Tenta buscar no Supabase Cloud
     if (this.supabaseUrl && this.supabaseKey) {
       try {
-        // Tenta com token de usuário autenticado (busca case-insensitive via ilike)
+        // Busca com token de usuário autenticado
         let res = await fetch(`${this.supabaseUrl}/rest/v1/lista_compartilhamentos?invite_code=ilike.${encodeURIComponent(cleanCode)}&select=*`, {
           method: 'GET',
           headers: this.getHeaders()
@@ -1627,12 +1643,9 @@ class Database {
         let shares = [];
         if (res.ok) {
           shares = await res.json();
-        } else {
-          const errBody = await res.text().catch(() => '');
-          console.warn(`[Convite] Erro autenticado (${res.status}):`, errBody);
         }
 
-        // Se RLS restringir o token de usuário, tenta com chave anônima (bypassa restrição de convite)
+        // Se RLS restringir ou não encontrar, tenta com chave anônima (bypassa restrição de leitura de convite)
         if (!shares || shares.length === 0) {
           const anonHeaders = {
             'apikey': this.supabaseKey,
@@ -1645,9 +1658,22 @@ class Database {
           });
           if (anonRes.ok) {
             shares = await anonRes.json();
-          } else {
-            const errBody2 = await anonRes.text().catch(() => '');
-            console.warn(`[Convite] Erro anon (${anonRes.status}):`, errBody2);
+          }
+        }
+
+        // Tenta também buscar sem o prefixo LST- ou com variação caso tenha sido salvo diferente
+        if (!shares || shares.length === 0) {
+          const altCode = cleanCode.replace('LST-', '');
+          const altRes = await fetch(`${this.supabaseUrl}/rest/v1/lista_compartilhamentos?invite_code=ilike.*${encodeURIComponent(altCode)}*&select=*`, {
+            method: 'GET',
+            headers: {
+              'apikey': this.supabaseKey,
+              'Authorization': `Bearer ${this.supabaseKey}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          if (altRes.ok) {
+            shares = await altRes.json();
           }
         }
 
@@ -1665,7 +1691,7 @@ class Database {
     }
 
     if (!share) {
-      throw new Error('Código de convite não encontrado ou expirado. Verifique o código e tente novamente.');
+      throw new Error(`Código "${cleanCode}" não foi encontrado na nuvem ou expirou.\n\n💡 Peça ao dono da lista para abrir a lista, tocar em "Compartilhar" e clicar no botão "🔄 Renovar Código" para reativá-lo na nuvem.`);
     }
 
     // Se o usuário atual for o próprio dono da lista

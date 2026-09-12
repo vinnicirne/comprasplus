@@ -1329,21 +1329,27 @@
 
         <!-- Opção 2: Código / Link de Acesso Rápido -->
         <div class="share-action-card">
-          <h4 style="font-size: 0.85rem; font-weight: 700; margin-bottom: 0.35rem;">Código & Link para WhatsApp</h4>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+            <h4 style="font-size: 0.85rem; font-weight: 700; margin: 0;">Código & Link para WhatsApp</h4>
+            <button type="button" id="btn-renovar-codigo-share" class="btn btn-outline btn-sm" style="font-size: 0.72rem; padding: 0.25rem 0.55rem;" title="Gera um novo código ativo na nuvem se o anterior expirou">
+              🔄 Renovar Código
+            </button>
+          </div>
           <p style="font-size: 0.72rem; color: var(--text-muted); margin-bottom: 0.5rem;">
             Qualquer pessoa com sua permissão pode usar esse código para acessar a lista.
           </p>
           <div class="share-code-box">
             <span class="share-code-display" id="share-display-code">LST-.....</span>
             <div style="display: flex; gap: 0.4rem;">
-              <button type="button" id="btn-copiar-codigo-share" class="btn btn-outline btn-sm">
+              <button type="button" id="btn-copiar-codigo-share" class="btn btn-outline btn-sm" style="flex: 1;">
                 📋 Copiar Código
               </button>
-              <button type="button" id="btn-enviar-link-whatsapp" class="btn btn-whatsapp-sm btn-sm">
+              <button type="button" id="btn-enviar-link-whatsapp" class="btn btn-whatsapp-sm btn-sm" style="flex: 1;">
                 📲 WhatsApp
               </button>
             </div>
           </div>
+          <div id="share-code-status-msg" class="auth-alert hidden" style="margin-top: 0.5rem; font-size: 0.75rem; padding: 0.4rem 0.6rem;"></div>
         </div>
 
         <!-- Lista de Colaboradores Existentes -->
@@ -1367,11 +1373,19 @@
         <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 1rem;">
           Cole ou digite o código de convite recebido (ex: <code>LST-8931</code>) para conectar a lista à sua conta.
         </p>
-        <div id="convite-alert-msg" class="auth-alert hidden" style="margin-bottom: 0.75rem;"></div>
+        <div id="convite-alert-msg" class="auth-alert hidden" style="margin-bottom: 0.75rem; white-space: pre-line;"></div>
         <form id="form-entrar-codigo">
           <div class="form-group-mobile">
             <label for="input-convite-codigo">Código do Convite *</label>
-            <input type="text" id="input-convite-codigo" placeholder="LST-XXXXX" required style="text-transform: uppercase; font-weight: 700; font-size: 1.1rem; letter-spacing: 1px; text-align: center;">
+            <div style="display: flex; gap: 0.4rem; align-items: center;">
+              <input type="text" id="input-convite-codigo" placeholder="LST-XXXXX" required style="flex: 1; text-transform: uppercase; font-weight: 700; font-size: 1.1rem; letter-spacing: 1px; text-align: center;">
+              <button type="button" id="btn-limpar-convite-codigo" class="btn btn-outline btn-sm" style="height: 42px; padding: 0 0.75rem;" title="Limpar campo">
+                ✕
+              </button>
+            </div>
+            <small style="font-size: 0.7rem; color: var(--text-muted); margin-top: 0.35rem; display: block;">
+              💡 Se o código aparecer expirado, peça ao dono da lista para clicar em <strong>"🔄 Renovar Código"</strong> na tela de compartilhamento.
+            </small>
           </div>
           <button type="submit" class="btn btn-primary" id="btn-submit-entrar-codigo" style="width: 100%; margin-top: 0.5rem;">
             🚀 Conectar Lista
