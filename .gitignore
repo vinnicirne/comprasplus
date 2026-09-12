@@ -2,7 +2,6 @@
 node_modules/
 
 # Builds
-android/
 www/
 
 # Sistema operacional
@@ -13,3 +12,4 @@ desktop.ini
 # Logs e temporários
 *.log
 .env
+.idea/

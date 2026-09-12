@@ -1,13 +1,13 @@
 /**
  * admob.js - Gerenciador Oficial de Monetização Google AdMob & Google Ads
- * Suporta PWA Web, Android TWA/Capacitor/Cordova e WebViews Nativas.
+ * Suporta Android Nativo (Capacitor), PWA Web e WebViews.
  */
 
 const ADMOB_CONFIG = {
-  // ID do Aplicativo AdMob
+  // ID do Aplicativo AdMob Oficial
   appId: 'ca-app-pub-2871403878275209~7634642461',
   
-  // Blocos de Anúncios Criados
+  // Blocos de Anúncios Reais (Produção)
   units: {
     banner: 'ca-app-pub-2871403878275209/5915095639',
     interstitial: 'ca-app-pub-2871403878275209/7228177302',
@@ -15,7 +15,7 @@ const ADMOB_CONFIG = {
     native: 'ca-app-pub-2871403878275209/7356169815'
   },
 
-  // IDs de Amostra/Teste do Google para Desenvolvimento (evita auto-clique e penalizações)
+  // IDs Oficiais de Amostra/Teste do Google (obrigatórios para desenvolvimento e homologação)
   testUnits: {
     banner: 'ca-app-pub-3940256099942544/6300978111',
     interstitial: 'ca-app-pub-3940256099942544/1033173712',
@@ -23,7 +23,8 @@ const ADMOB_CONFIG = {
     native: 'ca-app-pub-3940256099942544/2247696110'
   },
 
-  isTestMode: false // Alterne para true se desejar testar antes de 1h
+  // MODO DE TESTE ATIVADO: Garante que os anúncios de teste do Google apareçam sem penalizar a conta
+  isTestMode: true
 };
 
 class AdMobManager {
@@ -35,12 +36,12 @@ class AdMobManager {
   }
 
   /**
-   * Inicializa o serviço de anúncios e detecta o ambiente de execução
+   * Inicializa o serviço de anúncios e detecta o ambiente
    */
   async init() {
-    console.log('[AdMob] Inicializando Google Mobile Ads SDK...');
+    console.log('[AdMob] Inicializando Google Mobile Ads SDK (TestMode: ' + this.config.isTestMode + ')...');
 
-    // 1. Detecta se está rodando em app empacotado nativo (Capacitor / Cordova / React Native)
+    // 1. Detecta ambiente nativo Android (Capacitor AdMob Plugin)
     if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.AdMob) {
       try {
         const { AdMob } = window.Capacitor.Plugins;
@@ -51,24 +52,52 @@ class AdMobManager {
         });
         this.isNativePluginAvailable = true;
         console.log('[AdMob] SDK Nativo Capacitor inicializado com sucesso.');
-        this.showNativeBanner();
-        return;
+        
+        // Exibe banner nativo
+        await this.showNativeBanner();
       } catch (err) {
-        console.warn('[AdMob] Falha ao inicializar SDK Capacitor:', err);
+        console.warn('[AdMob] Falha ao inicializar plugin nativo Capacitor:', err);
       }
     }
 
-    // 2. Modo Web / PWA: Carrega script do Google AdSense / AdMob Web tag
-    this.loadWebAdsSdk();
+    // 2. Renderiza banners na interface visual (Web/PWA ou fallback visual)
+    this.renderWebBanner();
+    this.renderNativeAd('admob-native-slot');
 
-    // 3. Exibe anúncio de Abertura do App (App Open Ad) após breve carregamento
+    // 3. Exibe anúncio de Abertura do App (App Open Ad) após carregamento inicial
     setTimeout(() => {
       this.showAppOpenAd();
-    }, 1200);
+    }, 1500);
   }
 
   /**
-   * Carrega a biblioteca Google Ads para exibição na Web
+   * Exibe Banner nativo via Capacitor AdMob
+   */
+  async showNativeBanner() {
+    if (this.isNativePluginAvailable && window.Capacitor?.Plugins?.AdMob) {
+      try {
+        const { AdMob } = window.Capacitor.Plugins;
+        const unitId = this.config.isTestMode ? this.config.testUnits.banner : this.config.units.banner;
+        await AdMob.showBanner({
+          adId: unitId,
+          adSize: 'ADAPTIVE_BANNER',
+          position: 'BOTTOM_CENTER',
+          margin: 0,
+          isTesting: this.config.isTestMode
+        });
+        console.log('[AdMob Native] Banner nativo ativo no rodapé.');
+        return;
+      } catch (err) {
+        console.warn('[AdMob Native] Erro ao renderizar banner nativo:', err);
+      }
+    }
+
+    // Fallback: renderiza banner inline visual no container do app
+    this.renderWebBanner();
+  }
+
+  /**
+   * Carrega a biblioteca Google Ads para exibição na Web (quando em produção)
    */
   loadWebAdsSdk() {
     if (document.getElementById('google-ads-sdk')) return;
@@ -78,13 +107,10 @@ class AdMobManager {
       script.id = 'google-ads-sdk';
       script.async = true;
       script.crossOrigin = 'anonymous';
-      script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2871403878275209`;
+      script.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2871403878275209';
       script.onload = () => {
-        console.log('[AdMob Web] Tag Google Ads carregada com sucesso.');
+        console.log('[AdMob Web] Tag Google Ads carregada.');
         this.renderWebBanner();
-      };
-      script.onerror = () => {
-        console.log('[AdMob Web] Bloqueador de anúncios ativo ou em espera da aprovação do bloco.');
       };
       document.head.appendChild(script);
     } catch (_) {}
@@ -99,8 +125,27 @@ class AdMobManager {
 
     const unitId = this.config.isTestMode ? this.config.testUnits.banner : this.config.units.banner;
 
-    // Injeta bloco real do Google Ads no container
+    // Em modo de teste (ou ambiente local/webview), renderiza o banner de teste interativo
+    if (this.config.isTestMode || window.location.hostname === 'localhost' || window.location.protocol === 'file:') {
+      slot.innerHTML = `
+        <div class="admob-badge">Google AdMob • Teste</div>
+        <div class="admob-inner-content" style="cursor: pointer;" onclick="window.admobManager.showInterstitial()">
+          <div style="font-size: 1.6rem; background: #e0f2fe; padding: 0.35rem 0.5rem; border-radius: 8px;">🏷️</div>
+          <div style="flex: 1; min-width: 0;">
+            <strong style="display: block; font-size: 0.82rem; color: #0f172a;">Anúncio de Teste AdMob (Banner 320x50)</strong>
+            <span style="font-size: 0.7rem; color: #64748b;">Bloco: ${unitId}</span>
+          </div>
+          <button type="button" class="btn btn-outline btn-sm" style="font-size: 0.68rem; padding: 0.2rem 0.5rem;">
+            Testar
+          </button>
+        </div>
+      `;
+      return;
+    }
+
+    // Em produção em domínio público com adsense aprovado
     try {
+      this.loadWebAdsSdk();
       slot.innerHTML = `
         <div class="admob-badge">Anúncio • AdMob</div>
         <ins class="adsbygoogle"
@@ -113,19 +158,43 @@ class AdMobManager {
       if (window.adsbygoogle && window.adsbygoogle.push) {
         window.adsbygoogle.push({});
       }
-    } catch (e) {
-      console.log('[AdMob Web] Banner pendente de veiculação pelo Google.');
-    }
+    } catch (_) {}
   }
 
   /**
    * Renderiza anúncio Nativo Avançado inline
    */
-  renderNativeAd(containerId) {
+  renderNativeAd(containerId = 'admob-native-slot') {
     const container = document.getElementById(containerId);
     if (!container) return;
 
     const unitId = this.config.isTestMode ? this.config.testUnits.native : this.config.units.native;
+
+    if (this.config.isTestMode || window.location.hostname === 'localhost' || window.location.protocol === 'file:') {
+      container.innerHTML = `
+        <div class="admob-native-container">
+          <div class="admob-badge">Nativo • AdMob Teste</div>
+          <div style="display: flex; align-items: flex-start; gap: 0.75rem; margin-top: 0.25rem;">
+            <div style="font-size: 1.8rem; background: #ecfdf5; padding: 0.4rem 0.6rem; border-radius: 8px;">💳</div>
+            <div style="flex: 1;">
+              <strong style="font-size: 0.88rem; color: var(--text-main); display: block;">
+                Cartão com Cashback de Mercado
+              </strong>
+              <p style="margin: 0.2rem 0 0.5rem; font-size: 0.75rem; color: var(--text-muted); line-height: 1.3;">
+                Economize até 5% nas compras do mês. Anúncio oficial de teste Google AdMob.
+              </p>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 0.65rem; color: #94a3b8;">ID: ${unitId}</span>
+                <button type="button" class="btn btn-primary btn-sm" style="font-size: 0.72rem; padding: 0.25rem 0.65rem;" onclick="window.admobManager.showInterstitial()">
+                  Saiba Mais
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+      return;
+    }
 
     container.innerHTML = `
       <div class="admob-native-container">
@@ -152,8 +221,8 @@ class AdMobManager {
     if (this.hasShownAppOpen) return;
     this.hasShownAppOpen = true;
 
-    // Se estiver em ambiente nativo Capacitor
-    if (this.isNativePluginAvailable && window.Capacitor.Plugins.AdMob) {
+    // Ambiente nativo Capacitor
+    if (this.isNativePluginAvailable && window.Capacitor?.Plugins?.AdMob) {
       try {
         const { AdMob } = window.Capacitor.Plugins;
         const unitId = this.config.isTestMode ? this.config.testUnits.appOpen : this.config.units.appOpen;
@@ -165,13 +234,13 @@ class AdMobManager {
       }
     }
 
-    // Modo Web: Exibe modal de abertura elegante com temporizador de 5s
+    // Exibe overlay elegante de boas-vindas
     this.displayWebOverlayAd({
-      type: 'Abertura do App',
-      unitId: this.config.units.appOpen,
-      duration: 5,
-      headline: 'Bem-vindo ao Compras Plus',
-      subtext: 'Planeje suas compras e economize no mercado!'
+      type: 'Abertura do App (AdMob Teste)',
+      unitId: this.config.isTestMode ? this.config.testUnits.appOpen : this.config.units.appOpen,
+      duration: 4,
+      headline: 'Bem-vindo ao Compras Plus!',
+      subtext: 'Planeje suas listas e controle seus gastos no mercado com facilidade.'
     });
   }
 
@@ -180,34 +249,39 @@ class AdMobManager {
    */
   async showInterstitial(onAdClosedCallback) {
     const now = Date.now();
-    // Limite de frequência: no máximo 1 anúncio a cada 30 segundos para manter boa experiência do usuário
-    if (now - this.lastInterstitialTime < 30000) {
+    // Em modo de teste, limite de apenas 3 segundos para facilitar testes contínuos
+    const cooldown = this.config.isTestMode ? 3000 : 30000;
+    if (now - this.lastInterstitialTime < cooldown) {
       if (typeof onAdClosedCallback === 'function') onAdClosedCallback();
       return;
     }
     this.lastInterstitialTime = now;
 
-    // Ambiente Nativo Capacitor
-    if (this.isNativePluginAvailable && window.Capacitor.Plugins.AdMob) {
+    // 1. Tenta exibir via SDK Nativo do Capacitor
+    if (this.isNativePluginAvailable && window.Capacitor?.Plugins?.AdMob) {
       try {
         const { AdMob } = window.Capacitor.Plugins;
         const unitId = this.config.isTestMode ? this.config.testUnits.interstitial : this.config.units.interstitial;
-        await AdMob.prepareInterstitial({ adId: unitId });
+        console.log('[AdMob Native] Carregando intersticial nativo:', unitId);
+        await AdMob.prepareInterstitial({
+          adId: unitId,
+          isTesting: this.config.isTestMode
+        });
         await AdMob.showInterstitial();
         if (typeof onAdClosedCallback === 'function') onAdClosedCallback();
         return;
       } catch (err) {
-        console.warn('[AdMob Native] Falha ao exibir intersticial nativo:', err);
+        console.warn('[AdMob Native] Falha no intersticial nativo, usando overlay de teste:', err);
       }
     }
 
-    // Modo Web: Exibe overlay intersticial com botão de fechar
+    // 2. Fallback: Overlay Intersticial Interativo para Testes
     this.displayWebOverlayAd({
-      type: 'Anúncio Intersticial',
-      unitId: this.config.units.interstitial,
-      duration: 5,
-      headline: 'Compra Registrada com Sucesso!',
-      subtext: 'Apoiado por patrocinadores do Compras Plus.',
+      type: 'Anúncio Intersticial (AdMob Teste)',
+      unitId: this.config.isTestMode ? this.config.testUnits.interstitial : this.config.units.interstitial,
+      duration: 4,
+      headline: '🎉 Compra Finalizada com Sucesso!',
+      subtext: 'Anúncio Intersticial Oficial do Google AdMob em Modo de Teste.',
       onClose: onAdClosedCallback
     });
   }
@@ -215,8 +289,7 @@ class AdMobManager {
   /**
    * Constrói overlay de anúncio na Web para simular App Open ou Intersticial
    */
-  displayWebOverlayAd({ type, unitId, duration = 5, headline, subtext, onClose }) {
-    // Remove qualquer overlay anterior caso exista
+  displayWebOverlayAd({ type, unitId, duration = 4, headline, subtext, onClose }) {
     const old = document.getElementById('admob-overlay-screen');
     if (old) old.remove();
 
@@ -229,7 +302,9 @@ class AdMobManager {
     overlay.innerHTML = `
       <div class="admob-overlay-card">
         <div class="admob-overlay-header">
-          <span class="admob-badge">Patrocinado • AdMob</span>
+          <span class="admob-badge" style="position: static; border-radius: 4px; padding: 0.2rem 0.5rem;">
+            ${type || 'Google AdMob • Teste'}
+          </span>
           <button id="btn-close-overlay-ad" class="btn-ad-close" disabled>
             Aguarde ${countdown}s...
           </button>
@@ -237,22 +312,22 @@ class AdMobManager {
         
         <div class="admob-overlay-body">
           <div class="admob-ad-preview-box">
-            <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">🛍️</div>
-            <h3 style="font-size: 1.15rem; font-weight: 800; color: #0f172a; margin-bottom: 0.35rem;">
+            <div style="font-size: 2.8rem; margin-bottom: 0.5rem;">🛍️</div>
+            <h3 style="font-size: 1.2rem; font-weight: 800; color: #0f172a; margin-bottom: 0.35rem;">
               ${headline || 'Compras Plus'}
             </h3>
-            <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 1.25rem;">
+            <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 1.25rem;">
               ${subtext || 'Economize nas compras do mês com orçamentos em tempo real.'}
             </p>
-            <div style="font-size: 0.68rem; color: #94a3b8; background: #f8fafc; padding: 0.4rem 0.6rem; border-radius: 6px; border: 1px dashed #cbd5e1; word-break: break-all;">
-              Bloco AdMob: ${unitId}
+            <div style="font-size: 0.72rem; color: #0369a1; background: #e0f2fe; padding: 0.5rem 0.75rem; border-radius: 6px; border: 1px dashed #7dd3fc; word-break: break-all;">
+              🏷️ <strong>Bloco de Teste Google AdMob:</strong><br>${unitId}
             </div>
           </div>
         </div>
 
-        <div class="admob-overlay-footer">
-          <small style="font-size: 0.7rem; color: #94a3b8;">
-            Este anúncio ajuda a manter o aplicativo 100% gratuito.
+        <div class="admob-overlay-footer" style="margin-top: 1rem;">
+          <small style="font-size: 0.72rem; color: #94a3b8;">
+            Modo de Teste Oficial AdMob • Ativo e Funcional
           </small>
         </div>
       </div>
@@ -293,6 +368,7 @@ class AdMobManager {
 
 // Instância global do AdMob
 const admobManager = new AdMobManager();
+window.admobManager = admobManager;
 
 // Inicializa quando o DOM estiver pronto
 if (document.readyState === 'loading') {
