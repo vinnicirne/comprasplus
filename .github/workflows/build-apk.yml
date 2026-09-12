@@ -45,6 +45,7 @@ jobs:
       - name: Instalar e Sincronizar Capacitor Android
         run: |
           npx cap add android || true
+          node scripts/apply-android-assets.js
           npx cap sync android
 
       - name: Dar permissão de execução ao Gradle Wrapper
