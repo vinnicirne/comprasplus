@@ -47,6 +47,18 @@ try {
 
   copyFolderRecursiveSync(srcRes, destRes);
   console.log('✅ Ícones oficiais do Compras Plus aplicados com sucesso em android/app/src/main/res/!');
+
+  // Garante que variables.gradle use compileSdkVersion 35 (Android 15 / Vanilla Ice Cream)
+  const varsFile = path.join(rootDir, 'android', 'variables.gradle');
+  if (fs.existsSync(varsFile)) {
+    let varsContent = fs.readFileSync(varsFile, 'utf8');
+    if (varsContent.includes('compileSdkVersion = 34')) {
+      varsContent = varsContent.replace(/compileSdkVersion = 34/g, 'compileSdkVersion = 35')
+                               .replace(/targetSdkVersion = 34/g, 'targetSdkVersion = 35');
+      fs.writeFileSync(varsFile, varsContent, 'utf8');
+      console.log('✅ android/variables.gradle atualizado com compileSdkVersion = 35');
+    }
+  }
 } catch (err) {
   console.error('Erro ao aplicar assets Android:', err);
 }

@@ -36,11 +36,11 @@ jobs:
           distribution: 'temurin'
           java-version: 21
 
-      - name: Configurar Android SDK 34
+      - name: Configurar Android SDK 35
         uses: android-actions/setup-android@v3
         with:
-          api-level: 34
-          build-tools: 34.0.0
+          api-level: 35
+          build-tools: 35.0.0
 
       - name: Instalar e Sincronizar Capacitor Android
         run: |
