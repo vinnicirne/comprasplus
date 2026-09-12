@@ -1,0 +1,79 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Compilar APK Android
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do Código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Instalar Dependências
+        run: npm ci
+
+      - name: Preparar Assets Web
+        run: |
+          node scripts/generate-env.js
+          node scripts/prepare-www.js
+
+      - name: Configurar Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 17
+
+      - name: Configurar Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Sincronizar Capacitor Android
+        run: |
+          npx cap add android || true
+          npx cap sync android
+
+      - name: Dar permissão de execução ao Gradlew
+        run: chmod +x android/gradlew
+
+      - name: Compilar APK (Debug)
+        run: |
+          cd android
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Encontrar e Renomear APK
+        run: |
+          mkdir -p output-apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk output-apk/ListaDeComprasPlus.apk
+          echo "APK gerado em output-apk/ListaDeComprasPlus.apk"
+
+      - name: Fazer Upload do APK como Artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: ListaDeComprasPlus-APK
+          path: output-apk/ListaDeComprasPlus.apk
+          retention-days: 30
+
+      - name: Criar Release no GitHub (opcional)
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: "Lista de Compras Plus v1.0.${{ github.run_number }} (APK)"
+          body: |
+            🎉 **Nova versão do aplicativo Lista de Compras Plus**
+            
+            📱 Baixe o arquivo APK anexo para instalar no seu celular Android.
+          files: output-apk/ListaDeComprasPlus.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true

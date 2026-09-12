@@ -4,9 +4,9 @@
   "description": "Lista de Compras Plus & Orçamento Inteligente (PWA e Android)",
   "main": "index.html",
   "scripts": {
-    "build": "node scripts/generate-env.js",
+    "build": "node scripts/generate-env.js && node scripts/prepare-www.js",
     "start": "npx serve -l 3000 .",
-    "cap:sync": "npx cap sync",
+    "cap:sync": "node scripts/generate-env.js && node scripts/prepare-www.js && npx cap sync",
     "cap:open": "npx cap open android"
   },
   "keywords": [
