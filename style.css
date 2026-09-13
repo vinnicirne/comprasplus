@@ -2661,3 +2661,45 @@ input:focus, select:focus {
 .card-lista-item.lista-concluida {
   border-left: 4px solid #10b981;
 }
+
+/* Chip de Preço Interativo no Card do Produto */
+.btn-item-price-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.32rem 0.65rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid rgba(37, 99, 235, 0.25);
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--primary);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.btn-item-price-chip:hover {
+  background: rgba(37, 99, 235, 0.16);
+  transform: translateY(-1px);
+}
+
+.btn-item-price-chip.sem-preco {
+  background: #fef3c7;
+  border-color: #fcd34d;
+  color: #92400e;
+  font-weight: 600;
+  font-size: 0.76rem;
+  box-shadow: 0 1px 3px rgba(245, 158, 11, 0.15);
+}
+
+.btn-item-price-chip.sem-preco:hover {
+  background: #fde68a;
+  transform: scale(1.03);
+}
+
+.btn-item-price-chip.com-preco {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #065f46;
+}

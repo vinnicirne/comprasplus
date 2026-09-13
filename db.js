@@ -492,7 +492,8 @@ class Database {
             if (sharesRes.ok) {
               const shares = await sharesRes.json();
               shares.forEach(s => {
-                sharesMap[s.lista_id] = s.permission;
+                const targetLid = s.list_id || s.lista_id;
+                if (targetLid) sharesMap[targetLid] = s.permission;
               });
             }
           } catch (_) {}
@@ -799,6 +800,21 @@ class Database {
     const item = list.items.find(i => i.id === itemId);
     if (item) {
       item.checked = checked;
+      return await this.saveList(list);
+    }
+    return list;
+  }
+
+  /**
+   * Atualiza propriedades de um produto (ex: preço inserido no mercado)
+   */
+  async updateItem(listId, itemId, updates = {}) {
+    const list = await this.getListById(listId);
+    if (!list || !list.items) return null;
+
+    const item = list.items.find(i => i.id === itemId);
+    if (item) {
+      Object.assign(item, updates);
       return await this.saveList(list);
     }
     return list;
@@ -1451,6 +1467,7 @@ class Database {
     const inviteCode = this.generateInviteCode();
     const shareRecord = {
       id: 'share_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now(),
+      list_id: listId,
       lista_id: listId,
       owner_id: this.user.id,
       shared_with_email: cleanEmail,
@@ -1550,7 +1567,8 @@ class Database {
     let inviteCode = (forceNew || !list.inviteCode) ? this.generateInviteCode() : list.inviteCode;
 
     const shareRecord = {
-      id: 'share_' + listId + '_' + Date.now(),
+      id: 'share_' + listId,
+      list_id: listId,
       lista_id: listId,
       owner_id: this.user.id,
       shared_with_email: 'convite_link@comprasplus.app',
@@ -1562,15 +1580,13 @@ class Database {
     // 3. Salva ou atualiza no Supabase Cloud
     if (this.supabaseUrl && this.supabaseKey && this.accessToken) {
       try {
-        // Se estiver forçando renovação, remove registros de convites anteriores desta lista
-        if (forceNew) {
-          await fetch(`${this.supabaseUrl}/rest/v1/lista_compartilhamentos?lista_id=eq.${encodeURIComponent(listId)}&owner_id=eq.${encodeURIComponent(this.user.id)}&shared_with_email=eq.convite_link%40comprasplus.app`, {
-            method: 'DELETE',
-            headers: this.getHeaders()
-          });
-        }
+        // Remove registros de convite anteriores desta lista para evitar conflitos
+        await fetch(`${this.supabaseUrl}/rest/v1/lista_compartilhamentos?or=(list_id.eq.${encodeURIComponent(listId)},lista_id.eq.${encodeURIComponent(listId)})&shared_with_email=eq.convite_link%40comprasplus.app`, {
+          method: 'DELETE',
+          headers: this.getHeaders()
+        }).catch(() => {});
 
-        const res = await fetch(`${this.supabaseUrl}/rest/v1/lista_compartilhamentos`, {
+        const res = await fetch(`${this.supabaseUrl}/rest/v1/lista_compartilhamentos?on_conflict=id`, {
           method: 'POST',
           headers: {
             ...this.getHeaders(),
@@ -1580,20 +1596,13 @@ class Database {
         });
 
         if (!res.ok) {
-          // Fallback com chave anônima caso RLS restrinja
-          await fetch(`${this.supabaseUrl}/rest/v1/lista_compartilhamentos`, {
-            method: 'POST',
-            headers: {
-              'apikey': this.supabaseKey,
-              'Authorization': `Bearer ${this.supabaseKey}`,
-              'Content-Type': 'application/json',
-              'Prefer': 'resolution=merge-duplicates'
-            },
-            body: JSON.stringify(shareRecord)
-          });
+          const errData = await res.json().catch(() => ({}));
+          console.warn('[Share] Erro na resposta Supabase:', errData);
+          throw new Error(errData.message || 'Falha ao registrar convite no servidor.');
         }
       } catch (err) {
-        console.warn('Erro ao salvar convite no Supabase Cloud:', err);
+        console.error('Erro ao salvar convite no Supabase Cloud:', err);
+        throw err;
       }
     }
 
@@ -1694,9 +1703,10 @@ class Database {
       throw new Error(`Código "${cleanCode}" não foi encontrado na nuvem ou expirou.\n\n💡 Peça ao dono da lista para abrir a lista, tocar em "Compartilhar" e clicar no botão "🔄 Renovar Código" para reativá-lo na nuvem.`);
     }
 
+    const targetListId = share.list_id || share.lista_id;
     // Se o usuário atual for o próprio dono da lista
     if (share.owner_id === this.user.id) {
-      const ownerList = await this.getListById(share.lista_id);
+      const ownerList = await this.getListById(targetListId);
       if (ownerList) {
         return { list: ownerList, permission: 'owner', isOwner: true };
       }
@@ -1723,7 +1733,8 @@ class Database {
             },
             body: JSON.stringify({
               id: 'share_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now(),
-              lista_id: share.lista_id,
+              list_id: targetListId,
+              lista_id: targetListId,
               owner_id: share.owner_id,
               shared_with_user_id: this.user.id,
               shared_with_email: this.user.email,
@@ -1742,7 +1753,7 @@ class Database {
     let row = null;
     if (this.supabaseUrl && this.supabaseKey) {
       try {
-        let listRes = await fetch(`${this.supabaseUrl}/rest/v1/listas?id=eq.${encodeURIComponent(share.lista_id)}&select=*`, {
+        let listRes = await fetch(`${this.supabaseUrl}/rest/v1/listas?id=eq.${encodeURIComponent(targetListId)}&select=*`, {
           method: 'GET',
           headers: this.getHeaders()
         });
@@ -1761,25 +1772,23 @@ class Database {
             'Authorization': `Bearer ${this.supabaseKey}`,
             'Content-Type': 'application/json'
           };
-          const anonListRes = await fetch(`${this.supabaseUrl}/rest/v1/listas?id=eq.${encodeURIComponent(share.lista_id)}&select=*`, {
+          const anonListRes = await fetch(`${this.supabaseUrl}/rest/v1/listas?id=eq.${encodeURIComponent(targetListId)}&select=*`, {
             method: 'GET',
             headers: anonHeaders
           });
           if (anonListRes.ok) {
             const anonRows = await anonListRes.json();
-            if (anonRows && anonRows.length > 0) {
-              row = anonRows[0];
-            }
+            if (anonRows && anonRows.length > 0) row = anonRows[0];
           }
         }
       } catch (err) {
-        console.warn('[Convite] Erro ao buscar lista no Supabase:', err);
+        console.warn('Erro ao consultar lista na nuvem:', err);
       }
     }
 
     // Fallback local se a nuvem não responder
     if (!row) {
-      const local = await this.getListById(share.lista_id);
+      const local = await this.getListById(targetListId);
       if (local) {
         row = {
           id: local.id,
@@ -1827,7 +1836,7 @@ class Database {
     if (!this.isAuthenticated() || !this.supabaseUrl) return [];
 
     try {
-      const res = await fetch(`${this.supabaseUrl}/rest/v1/lista_compartilhamentos?lista_id=eq.${listId}&select=*`, {
+      const res = await fetch(`${this.supabaseUrl}/rest/v1/lista_compartilhamentos?or=(list_id.eq.${encodeURIComponent(listId)},lista_id.eq.${encodeURIComponent(listId)})&select=*`, {
         method: 'GET',
         headers: this.getHeaders()
       });

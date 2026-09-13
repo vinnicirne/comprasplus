@@ -98,8 +98,16 @@ function calculateItemSubtotal(item) {
 function calculateListTotals(list) {
   const items = list.items || [];
   
-  // Total Gasto = Soma de todos os produtos considerando suas unidades de medida
+  // Total Gasto = Computa EXCLUSIVAMENTE os itens marcados como comprados (carrinho)
   const totalGasto = items.reduce((sum, item) => {
+    if (item.checked) {
+      return sum + calculateItemSubtotal(item);
+    }
+    return sum;
+  }, 0);
+
+  // Total Estimado (caso todos os itens tivessem sido comprados)
+  const totalPrevisto = items.reduce((sum, item) => {
     return sum + calculateItemSubtotal(item);
   }, 0);
 
@@ -110,6 +118,7 @@ function calculateListTotals(list) {
   return {
     orcamento,
     totalGasto,
+    totalPrevisto,
     saldoDisponivel,
     percentualConsumido: Math.max(0, percentualConsumido)
   };
@@ -522,7 +531,15 @@ function renderProductCards(list) {
         </div>
 
         <div class="product-right-col">
-          <span class="product-subtotal-val">${formatCurrency(subtotal)}</span>
+          ${preco <= 0 ? `
+            <button type="button" class="btn-item-price-chip sem-preco" onclick="handleEditItemPrice('${list.id}', '${item.id}')" title="Toque para colocar o preço de mercado">
+              🏷️ Colocar Preço
+            </button>
+          ` : `
+            <button type="button" class="btn-item-price-chip com-preco" onclick="handleEditItemPrice('${list.id}', '${item.id}')" title="Toque para alterar o preço">
+              ${formatCurrency(subtotal)} ✎
+            </button>
+          `}
           ${!isReadOnly ? `
             <button class="btn-trash" title="Excluir item" onclick="handleDeleteItem('${list.id}', '${item.id}')">
               ✕
@@ -566,6 +583,7 @@ window.showDashboard = showDashboard;
 window.handleDeleteList = handleDeleteList;
 window.handleToggleItem = handleToggleItem;
 window.handleDeleteItem = handleDeleteItem;
+window.handleEditItemPrice = handleEditItemPrice;
 window.shareListWhatsApp = shareListWhatsApp;
 
 // ==========================================================
@@ -627,7 +645,52 @@ async function handleDeleteList(listId, event) {
 
 async function handleToggleItem(listId, itemId, checked) {
   vibrateDevice(15);
+  const list = state.lists.find(l => l.id === listId);
+  if (list && list.items) {
+    const item = list.items.find(i => i.id === itemId);
+    // Se estiver marcando como comprado e ainda não tiver preço
+    if (item && checked && (Number(item.unitPrice) || 0) <= 0) {
+      const precoDigitado = prompt(`🛒 Qual o valor de "${item.name}" no mercado? (R$)\n\n(Digite o valor pago para calcular no total):`, '');
+      if (precoDigitado !== null && precoDigitado.trim() !== '') {
+        const parsed = parseFloat(precoDigitado.replace(',', '.')) || 0;
+        if (parsed > 0) {
+          item.unitPrice = parsed;
+          item.checked = true;
+          await db.updateItem(listId, itemId, { unitPrice: parsed, checked: true });
+          const updatedList = await db.getListById(listId);
+          if (updatedList) {
+            const idx = state.lists.findIndex(l => l.id === listId);
+            if (idx !== -1) state.lists[idx] = updatedList;
+            renderListDetail(listId);
+            return;
+          }
+        }
+      }
+    }
+  }
+
   const updatedList = await db.toggleItem(listId, itemId, checked);
+  if (updatedList) {
+    const idx = state.lists.findIndex(l => l.id === listId);
+    if (idx !== -1) state.lists[idx] = updatedList;
+    renderListDetail(listId);
+  }
+}
+
+async function handleEditItemPrice(listId, itemId) {
+  const list = state.lists.find(l => l.id === listId);
+  if (!list || !list.items) return;
+  const item = list.items.find(i => i.id === itemId);
+  if (!item) return;
+
+  const currentVal = (Number(item.unitPrice) || 0) > 0 ? String(item.unitPrice).replace('.', ',') : '';
+  const novoValor = prompt(`🏷️ Preço de "${item.name}" no mercado (R$):`, currentVal);
+  if (novoValor === null) return;
+
+  const parsed = parseFloat(novoValor.replace(',', '.')) || 0;
+  vibrateDevice(20);
+  await db.updateItem(listId, itemId, { unitPrice: parsed });
+  const updatedList = await db.getListById(listId);
   if (updatedList) {
     const idx = state.lists.findIndex(l => l.id === listId);
     if (idx !== -1) state.lists[idx] = updatedList;
@@ -720,42 +783,42 @@ function setProductUnit(unit) {
 
   if (unit === 'kg') {
     if (labelQtd) labelQtd.textContent = 'Peso (kg) *';
-    if (labelPreco) labelPreco.textContent = 'Preço do Kg (R$) *';
+    if (labelPreco) labelPreco.textContent = 'Preço do Kg (R$)';
     if (qtdInput) {
-      qtdInput.step = '0.05';
-      qtdInput.min = '0.01';
+      qtdInput.step = '0.1';
+      qtdInput.min = '0.1';
       if (!qtdInput.value || qtdInput.value === '250') qtdInput.value = '1';
       qtdInput.placeholder = 'Ex: 1.5';
     }
     if (tipEl) tipEl.style.display = 'none';
   } else if (unit === 'g') {
     if (labelQtd) labelQtd.textContent = 'Peso (Gramas - g) *';
-    if (labelPreco) labelPreco.textContent = 'Preço do Kg no Mercado (R$) *';
+    if (labelPreco) labelPreco.textContent = 'Preço do Kg no Mercado (R$)';
     if (qtdInput) {
-      qtdInput.step = '10';
-      qtdInput.min = '1';
+      qtdInput.step = '50';
+      qtdInput.min = '50';
       if (!qtdInput.value || qtdInput.value === '1') qtdInput.value = '250';
       qtdInput.placeholder = 'Ex: 300';
     }
     if (tipEl) tipEl.style.display = 'block';
   } else if (unit === 'L') {
     if (labelQtd) labelQtd.textContent = 'Volume (Litros - L) *';
-    if (labelPreco) labelPreco.textContent = 'Preço do Litro (R$) *';
+    if (labelPreco) labelPreco.textContent = 'Preço do Litro (R$)';
     if (qtdInput) {
-      qtdInput.step = '0.1';
-      qtdInput.min = '0.05';
+      qtdInput.step = '0.5';
+      qtdInput.min = '0.5';
       if (!qtdInput.value || qtdInput.value === '250') qtdInput.value = '1';
       qtdInput.placeholder = 'Ex: 1';
     }
     if (tipEl) tipEl.style.display = 'none';
   } else {
-    // 'un'
+    // 'un' - Unidades inteiras 1, 2, 3, 4...
     if (labelQtd) labelQtd.textContent = 'Quantidade (un) *';
-    if (labelPreco) labelPreco.textContent = 'Valor Unit. (R$) *';
+    if (labelPreco) labelPreco.textContent = 'Valor Unit. (R$) - Opcional';
     if (qtdInput) {
       qtdInput.step = '1';
-      qtdInput.min = '0.01';
-      if (!qtdInput.value || qtdInput.value === '250') qtdInput.value = '1';
+      qtdInput.min = '1';
+      qtdInput.value = Math.max(1, Math.round(parseFloat(qtdInput.value) || 1));
       qtdInput.placeholder = 'Ex: 1';
     }
     if (tipEl) tipEl.style.display = 'none';
@@ -1381,15 +1444,17 @@ function setupEventListeners() {
   precoInput.addEventListener('input', updateSubtotalPreview);
 
   document.getElementById('btn-qty-minus').addEventListener('click', () => {
-    let cur = parseFloat(qtdInput.value) || 0;
+    let cur = parseFloat(qtdInput.value) || 1;
     const unit = document.getElementById('produto-unidade')?.value || 'un';
-    const step = unit === 'g' ? 50 : (unit === 'kg' ? 0.25 : (unit === 'L' ? 0.5 : 1));
-    const min = unit === 'g' ? 10 : (unit === 'kg' ? 0.05 : (unit === 'L' ? 0.1 : 1));
     
-    if (cur - step >= min) {
-      qtdInput.value = Math.round((cur - step) * 1000) / 1000;
-    } else {
-      qtdInput.value = min;
+    if (unit === 'un') {
+      qtdInput.value = Math.max(1, Math.round(cur) - 1);
+    } else if (unit === 'g') {
+      qtdInput.value = Math.max(50, Math.round((cur - 50) / 50) * 50);
+    } else if (unit === 'kg') {
+      qtdInput.value = Math.max(0.1, Math.round((cur - 0.25) * 100) / 100);
+    } else if (unit === 'L') {
+      qtdInput.value = Math.max(0.5, Math.round((cur - 0.5) * 10) / 10);
     }
     updateSubtotalPreview();
   });
@@ -1397,8 +1462,16 @@ function setupEventListeners() {
   document.getElementById('btn-qty-plus').addEventListener('click', () => {
     let cur = parseFloat(qtdInput.value) || 0;
     const unit = document.getElementById('produto-unidade')?.value || 'un';
-    const step = unit === 'g' ? 50 : (unit === 'kg' ? 0.25 : (unit === 'L' ? 0.5 : 1));
-    qtdInput.value = Math.round((cur + step) * 1000) / 1000;
+    
+    if (unit === 'un') {
+      qtdInput.value = Math.max(1, Math.round(cur) + 1);
+    } else if (unit === 'g') {
+      qtdInput.value = Math.round((cur + 50) / 50) * 50;
+    } else if (unit === 'kg') {
+      qtdInput.value = Math.round((cur + 0.25) * 100) / 100;
+    } else if (unit === 'L') {
+      qtdInput.value = Math.round((cur + 0.5) * 10) / 10;
+    }
     updateSubtotalPreview();
   });
 

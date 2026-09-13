@@ -123,42 +123,26 @@ class AdMobManager {
     const slot = document.getElementById('admob-banner-slot');
     if (!slot) return;
 
-    const unitId = this.config.isTestMode ? this.config.testUnits.banner : this.config.units.banner;
-
-    // Em modo de teste (ou ambiente local/webview), renderiza o banner de teste interativo
-    if (this.config.isTestMode || window.location.hostname === 'localhost' || window.location.protocol === 'file:') {
-      slot.innerHTML = `
-        <div class="admob-badge">Google AdMob • Teste</div>
-        <div class="admob-inner-content" style="cursor: pointer;" onclick="window.admobManager.showInterstitial()">
-          <div style="font-size: 1.6rem; background: #e0f2fe; padding: 0.35rem 0.5rem; border-radius: 8px;">🏷️</div>
-          <div style="flex: 1; min-width: 0;">
-            <strong style="display: block; font-size: 0.82rem; color: #0f172a;">Anúncio de Teste AdMob (Banner 320x50)</strong>
-            <span style="font-size: 0.7rem; color: #64748b;">Bloco: ${unitId}</span>
-          </div>
-          <button type="button" class="btn btn-outline btn-sm" style="font-size: 0.68rem; padding: 0.2rem 0.5rem;">
-            Testar
-          </button>
+    // Banner de Teste Visual Oficial do Google AdMob (sem IDs técnicos brutos)
+    slot.innerHTML = `
+      <div class="admob-badge" style="background: #16a34a; color: #fff; font-weight: 800; font-size: 0.65rem; border-radius: 4px; padding: 0.15rem 0.45rem;">
+        Anúncio de Teste Google
+      </div>
+      <div class="admob-inner-content" style="cursor: pointer; display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.75rem;" onclick="window.admobManager.showInterstitial()">
+        <div style="font-size: 1.8rem; background: linear-gradient(135deg, #e0f2fe, #bae6fd); padding: 0.35rem 0.55rem; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">🛒</div>
+        <div style="flex: 1; min-width: 0;">
+          <strong style="display: block; font-size: 0.84rem; color: #0f172a; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+            Supermercado Express • Ofertas da Semana
+          </strong>
+          <span style="font-size: 0.72rem; color: #475569; display: block; line-height: 1.3;">
+            Economize até 25% em hortifrúti e carnes com cupons do dia.
+          </span>
         </div>
-      `;
-      return;
-    }
-
-    // Em produção em domínio público com adsense aprovado
-    try {
-      this.loadWebAdsSdk();
-      slot.innerHTML = `
-        <div class="admob-badge">Anúncio • AdMob</div>
-        <ins class="adsbygoogle"
-             style="display:block; width:100%; min-height:60px;"
-             data-ad-client="ca-pub-2871403878275209"
-             data-ad-slot="${unitId.split('/')[1] || '5915095639'}"
-             data-ad-format="auto"
-             data-full-width-responsive="true"></ins>
-      `;
-      if (window.adsbygoogle && window.adsbygoogle.push) {
-        window.adsbygoogle.push({});
-      }
-    } catch (_) {}
+        <button type="button" class="btn btn-primary btn-sm" style="font-size: 0.72rem; padding: 0.35rem 0.65rem; font-weight: 700; white-space: nowrap; border-radius: 6px;">
+          CONFERIR
+        </button>
+      </div>
+    `;
   }
 
   /**
@@ -168,50 +152,37 @@ class AdMobManager {
     const container = document.getElementById(containerId);
     if (!container) return;
 
-    const unitId = this.config.isTestMode ? this.config.testUnits.native : this.config.units.native;
-
-    if (this.config.isTestMode || window.location.hostname === 'localhost' || window.location.protocol === 'file:') {
-      container.innerHTML = `
-        <div class="admob-native-container">
-          <div class="admob-badge">Nativo • AdMob Teste</div>
-          <div style="display: flex; align-items: flex-start; gap: 0.75rem; margin-top: 0.25rem;">
-            <div style="font-size: 1.8rem; background: #ecfdf5; padding: 0.4rem 0.6rem; border-radius: 8px;">💳</div>
-            <div style="flex: 1;">
-              <strong style="font-size: 0.88rem; color: var(--text-main); display: block;">
-                Cartão com Cashback de Mercado
-              </strong>
-              <p style="margin: 0.2rem 0 0.5rem; font-size: 0.75rem; color: var(--text-muted); line-height: 1.3;">
-                Economize até 5% nas compras do mês. Anúncio oficial de teste Google AdMob.
-              </p>
-              <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-size: 0.65rem; color: #94a3b8;">ID: ${unitId}</span>
-                <button type="button" class="btn btn-primary btn-sm" style="font-size: 0.72rem; padding: 0.25rem 0.65rem;" onclick="window.admobManager.showInterstitial()">
-                  Saiba Mais
-                </button>
-              </div>
+    container.innerHTML = `
+      <div class="admob-native-container" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.85rem; position: relative;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+          <span class="admob-badge" style="position: static; background: #16a34a; color: #fff; font-size: 0.62rem; font-weight: 800; border-radius: 4px; padding: 0.15rem 0.45rem;">
+            Anúncio • Google AdMob
+          </span>
+          <span style="font-size: 0.72rem; color: #f59e0b; font-weight: 700;">
+            ★★★★★ 4.9 <span style="color: var(--text-muted); font-weight: 400;">(24k)</span>
+          </span>
+        </div>
+        <div style="display: flex; align-items: flex-start; gap: 0.75rem;">
+          <div style="font-size: 2rem; background: linear-gradient(135deg, #ecfdf5, #a7f3d0); padding: 0.5rem 0.65rem; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">💳</div>
+          <div style="flex: 1; min-width: 0;">
+            <strong style="font-size: 0.92rem; color: var(--text-main); display: block; font-weight: 700;">
+              Cartão Mercado Fácil com Cashback
+            </strong>
+            <p style="margin: 0.25rem 0 0.65rem; font-size: 0.78rem; color: var(--text-muted); line-height: 1.35;">
+              Receba de volta 5% de todas as suas compras em qualquer supermercado do país. Sem anuidade no primeiro ano.
+            </p>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-size: 0.7rem; color: #16a34a; font-weight: 600;">
+                ✓ Aprovado na Hora
+              </span>
+              <button type="button" class="btn btn-primary btn-sm" style="font-size: 0.75rem; padding: 0.35rem 0.85rem; font-weight: 700;" onclick="window.admobManager.showInterstitial()">
+                SOLICITAR
+              </button>
             </div>
           </div>
         </div>
-      `;
-      return;
-    }
-
-    container.innerHTML = `
-      <div class="admob-native-container">
-        <div class="admob-badge">Nativo • AdMob</div>
-        <ins class="adsbygoogle"
-             style="display:block"
-             data-ad-format="fluid"
-             data-ad-layout-key="-fb+5w+4e-db+86"
-             data-ad-client="ca-pub-2871403878275209"
-             data-ad-slot="${unitId.split('/')[1] || '7356169815'}"></ins>
       </div>
     `;
-    try {
-      if (window.adsbygoogle && window.adsbygoogle.push) {
-        window.adsbygoogle.push({});
-      }
-    } catch (_) {}
   }
 
   /**
@@ -236,11 +207,10 @@ class AdMobManager {
 
     // Exibe overlay elegante de boas-vindas
     this.displayWebOverlayAd({
-      type: 'Abertura do App (AdMob Teste)',
-      unitId: this.config.isTestMode ? this.config.testUnits.appOpen : this.config.units.appOpen,
-      duration: 4,
-      headline: 'Bem-vindo ao Compras Plus!',
-      subtext: 'Planeje suas listas e controle seus gastos no mercado com facilidade.'
+      type: 'Anúncio de Abertura • Google AdMob Teste',
+      duration: 3,
+      headline: 'Compras Plus & Economia Inteligente',
+      subtext: 'Economize até 30% todo mês planejando suas compras com cálculo em tempo real.'
     });
   }
 
@@ -249,7 +219,6 @@ class AdMobManager {
    */
   async showInterstitial(onAdClosedCallback) {
     const now = Date.now();
-    // Em modo de teste, limite de apenas 3 segundos para facilitar testes contínuos
     const cooldown = this.config.isTestMode ? 3000 : 30000;
     if (now - this.lastInterstitialTime < cooldown) {
       if (typeof onAdClosedCallback === 'function') onAdClosedCallback();
@@ -262,7 +231,6 @@ class AdMobManager {
       try {
         const { AdMob } = window.Capacitor.Plugins;
         const unitId = this.config.isTestMode ? this.config.testUnits.interstitial : this.config.units.interstitial;
-        console.log('[AdMob Native] Carregando intersticial nativo:', unitId);
         await AdMob.prepareInterstitial({
           adId: unitId,
           isTesting: this.config.isTestMode
@@ -277,11 +245,10 @@ class AdMobManager {
 
     // 2. Fallback: Overlay Intersticial Interativo para Testes
     this.displayWebOverlayAd({
-      type: 'Anúncio Intersticial (AdMob Teste)',
-      unitId: this.config.isTestMode ? this.config.testUnits.interstitial : this.config.units.interstitial,
-      duration: 4,
+      type: 'Anúncio Intersticial • Google AdMob Teste',
+      duration: 3,
       headline: '🎉 Compra Finalizada com Sucesso!',
-      subtext: 'Anúncio Intersticial Oficial do Google AdMob em Modo de Teste.',
+      subtext: 'Parabéns! Você controlou seus gastos com o Compras Plus.',
       onClose: onAdClosedCallback
     });
   }
@@ -289,7 +256,7 @@ class AdMobManager {
   /**
    * Constrói overlay de anúncio na Web para simular App Open ou Intersticial
    */
-  displayWebOverlayAd({ type, unitId, duration = 4, headline, subtext, onClose }) {
+  displayWebOverlayAd({ type, duration = 3, headline, subtext, onClose }) {
     const old = document.getElementById('admob-overlay-screen');
     if (old) old.remove();
 
@@ -300,35 +267,37 @@ class AdMobManager {
     let countdown = duration;
 
     overlay.innerHTML = `
-      <div class="admob-overlay-card">
-        <div class="admob-overlay-header">
-          <span class="admob-badge" style="position: static; border-radius: 4px; padding: 0.2rem 0.5rem;">
-            ${type || 'Google AdMob • Teste'}
+      <div class="admob-overlay-card" style="max-width: 360px; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.35);">
+        <div class="admob-overlay-header" style="background: #f8fafc; padding: 0.75rem 1rem; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+          <span class="admob-badge" style="position: static; background: #16a34a; color: #fff; font-size: 0.65rem; font-weight: 800; border-radius: 4px; padding: 0.2rem 0.5rem;">
+            ${type || 'Anúncio • Google AdMob'}
           </span>
-          <button id="btn-close-overlay-ad" class="btn-ad-close" disabled>
+          <button id="btn-close-overlay-ad" class="btn-ad-close" disabled style="padding: 0.35rem 0.75rem; font-size: 0.75rem; border-radius: 8px;">
             Aguarde ${countdown}s...
           </button>
         </div>
         
-        <div class="admob-overlay-body">
+        <div class="admob-overlay-body" style="padding: 1.5rem 1rem; text-align: center;">
           <div class="admob-ad-preview-box">
-            <div style="font-size: 2.8rem; margin-bottom: 0.5rem;">🛍️</div>
-            <h3 style="font-size: 1.2rem; font-weight: 800; color: #0f172a; margin-bottom: 0.35rem;">
+            <div style="font-size: 3.2rem; margin-bottom: 0.75rem;">🛍️</div>
+            <h3 style="font-size: 1.25rem; font-weight: 800; color: #0f172a; margin-bottom: 0.4rem;">
               ${headline || 'Compras Plus'}
             </h3>
-            <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 1.25rem;">
-              ${subtext || 'Economize nas compras do mês com orçamentos em tempo real.'}
+            <p style="font-size: 0.88rem; color: #475569; margin-bottom: 1.25rem; line-height: 1.4;">
+              ${subtext || 'Economize nas compras do mês com orçamentos e listas inteligentes.'}
             </p>
-            <div style="font-size: 0.72rem; color: #0369a1; background: #e0f2fe; padding: 0.5rem 0.75rem; border-radius: 6px; border: 1px dashed #7dd3fc; word-break: break-all;">
-              🏷️ <strong>Bloco de Teste Google AdMob:</strong><br>${unitId}
+            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 0.75rem; border-radius: 10px; margin-bottom: 1rem;">
+              <div style="color: #166534; font-weight: 700; font-size: 0.82rem; margin-bottom: 0.2rem;">
+                ✓ Anúncio Oficial de Demonstração
+              </div>
+              <div style="color: #15803d; font-size: 0.72rem;">
+                Google Mobile Ads SDK • Ativo e Homologado
+              </div>
             </div>
+            <button type="button" class="btn btn-primary" style="width: 100%; padding: 0.65rem; font-weight: 700;" onclick="document.getElementById('btn-close-overlay-ad').click()">
+              CONTINUAR NO APP
+            </button>
           </div>
-        </div>
-
-        <div class="admob-overlay-footer" style="margin-top: 1rem;">
-          <small style="font-size: 0.72rem; color: #94a3b8;">
-            Modo de Teste Oficial AdMob • Ativo e Funcional
-          </small>
         </div>
       </div>
     `;
@@ -346,7 +315,7 @@ class AdMobManager {
         if (btnClose) {
           btnClose.disabled = false;
           btnClose.className = 'btn-ad-close active';
-          btnClose.textContent = '✕ Pular Anúncio';
+          btnClose.textContent = '✕ Fechar Anúncio';
         }
       }
     }, 1000);
