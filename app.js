@@ -775,6 +775,9 @@ function openSheet(id) {
   const sheet = document.getElementById(id);
   if (sheet) {
     sheet.classList.remove('hidden');
+    if (window.admobManager && typeof window.admobManager.hideBanner === 'function') {
+      window.admobManager.hideBanner();
+    }
   }
 }
 
@@ -783,10 +786,19 @@ function closeSheet(id) {
   if (sheet) {
     sheet.classList.add('hidden');
   }
+  const remainingSheets = document.querySelectorAll('.bottom-sheet-backdrop:not(.hidden)');
+  if (remainingSheets.length === 0) {
+    if (window.admobManager && typeof window.admobManager.resumeBanner === 'function') {
+      window.admobManager.resumeBanner();
+    }
+  }
 }
 
 function closeAllSheets() {
   document.querySelectorAll('.bottom-sheet-backdrop').forEach(s => s.classList.add('hidden'));
+  if (window.admobManager && typeof window.admobManager.resumeBanner === 'function') {
+    window.admobManager.resumeBanner();
+  }
 }
 
 // ==========================================================
@@ -2093,6 +2105,11 @@ async function loadAndRenderWallet() {
   // Preenche anos disponíveis
   const currentYear = new Date().getFullYear();
   if (selectAno && selectAno.options.length === 0) {
+    const optAll = document.createElement('option');
+    optAll.value = 'all';
+    optAll.textContent = '📅 Todos os Anos';
+    selectAno.appendChild(optAll);
+
     for (let y = currentYear - 2; y <= currentYear + 2; y++) {
       const opt = document.createElement('option');
       opt.value = y;
@@ -2102,10 +2119,11 @@ async function loadAndRenderWallet() {
     }
   }
 
-  const entries = await db.getWalletEntries(walletFilter);
+  // Busca todas as entradas para garantir que o saldo geral acumulado nunca se perca
+  const allEntries = await db.getWalletEntries({});
   const purchases = await db.getPurchaseHistory();
 
-  const balance = db.calculateWalletBalance(entries, purchases, walletFilter);
+  const balance = db.calculateWalletBalance(allEntries, purchases, walletFilter);
 
   // Cards de balanço
   const elEntradas = document.getElementById('carteira-total-entradas');
@@ -2113,9 +2131,13 @@ async function loadAndRenderWallet() {
   const elSaldo = document.getElementById('carteira-saldo-carteira');
   const elBadge = document.getElementById('carteira-saldo-badge');
 
-  if (elEntradas) elEntradas.textContent = formatCurrency(balance.totalEntradas);
-  if (elSaidas) elSaidas.textContent = formatCurrency(balance.totalSaidas);
-  if (elSaldo) elSaldo.textContent = formatCurrency(balance.saldoDisponivel);
+  const isPeriodAll = (walletFilter.year === 'all' && walletFilter.month === 'all');
+  if (elEntradas) elEntradas.textContent = formatCurrency(isPeriodAll ? balance.totalGeralRecebido : balance.totalRecebido);
+  if (elSaidas) elSaidas.textContent = formatCurrency(isPeriodAll ? balance.totalGeralSaidas : balance.totalSaidas);
+  
+  // Saldo da Carteira reflete o saldo geral real disponível de caixa
+  const realSaldo = balance.saldoGeralCarteira !== undefined ? balance.saldoGeralCarteira : balance.saldoDisponivel;
+  if (elSaldo) elSaldo.textContent = formatCurrency(realSaldo);
 
   const elEntradasCount = document.getElementById('carteira-entradas-count');
   const elSaidasCount = document.getElementById('carteira-saidas-count');
@@ -2123,7 +2145,7 @@ async function loadAndRenderWallet() {
   if (elSaidasCount) elSaidasCount.textContent = `${balance.purchasesCount} ${balance.purchasesCount === 1 ? 'compra registrada' : 'compras registradas'}`;
 
   if (elBadge) {
-    if (balance.saldoDisponivel >= 0) {
+    if (realSaldo >= 0) {
       elBadge.className = 'carteira-status-badge badge-green';
       elBadge.textContent = 'Saldo Positivo (No Verde)';
     } else {

@@ -1072,10 +1072,9 @@ class Database {
           purchased_at: historyItem.purchasedAt
         };
 
-        await fetch(endpoint, {
+        await this.authFetch(endpoint, {
           method: 'POST',
           headers: {
-            ...this.getHeaders(),
             'Prefer': 'resolution=merge-duplicates'
           },
           body: JSON.stringify(payload)
@@ -1101,9 +1100,8 @@ class Database {
     if (this.supabaseUrl && this.supabaseKey) {
       try {
         const endpoint = `${this.supabaseUrl}/rest/v1/historico_compras?select=*&order=purchased_at.desc`;
-        const res = await fetch(endpoint, {
-          method: 'GET',
-          headers: this.getHeaders()
+        const res = await this.authFetch(endpoint, {
+          method: 'GET'
         });
 
         if (res.ok) {
@@ -1146,7 +1144,7 @@ class Database {
         const req = store.getAll();
         req.onsuccess = () => {
           let list = req.result || [];
-          list = list.filter(h => h.userId === this.user.id);
+          list = list.filter(h => !h.userId || !this.user?.id || h.userId === this.user.id);
           list.sort((a, b) => new Date(b.purchasedAt) - new Date(a.purchasedAt));
           resolve(list);
         };
@@ -1178,9 +1176,8 @@ class Database {
     if (this.supabaseUrl && this.supabaseKey) {
       try {
         const endpoint = `${this.supabaseUrl}/rest/v1/historico_compras?id=eq.${encodeURIComponent(id)}`;
-        await fetch(endpoint, {
-          method: 'DELETE',
-          headers: this.getHeaders()
+        await this.authFetch(endpoint, {
+          method: 'DELETE'
         });
       } catch (_) {}
     }
@@ -1308,18 +1305,16 @@ class Database {
     if (this.supabaseUrl && this.supabaseKey && this.accessToken) {
       try {
         // Atualiza no Supabase Auth
-        await fetch(`${this.supabaseUrl}/auth/v1/user`, {
+        await this.authFetch(`${this.supabaseUrl}/auth/v1/user`, {
           method: 'PUT',
-          headers: this.getHeaders(),
           body: JSON.stringify({
             data: { name, phone }
           })
         });
 
         // Atualiza na tabela user_profiles
-        await fetch(`${this.supabaseUrl}/rest/v1/user_profiles?id=eq.${this.user.id}`, {
+        await this.authFetch(`${this.supabaseUrl}/rest/v1/user_profiles?id=eq.${this.user.id}`, {
           method: 'PATCH',
-          headers: this.getHeaders(),
           body: JSON.stringify({ name, phone })
         });
       } catch (err) {
@@ -1402,10 +1397,9 @@ class Database {
           created_at: record.createdAt
         };
 
-        const res = await fetch(`${this.supabaseUrl}/rest/v1/carteira_entradas?on_conflict=id`, {
+        const res = await this.authFetch(`${this.supabaseUrl}/rest/v1/carteira_entradas?on_conflict=id`, {
           method: 'POST',
           headers: {
-            ...this.getHeaders(),
             'Prefer': 'resolution=merge-duplicates,return=representation'
           },
           body: JSON.stringify(payload)
@@ -1435,9 +1429,8 @@ class Database {
     // Tenta sincronizar com a nuvem
     if (this.supabaseUrl && this.supabaseKey && this.accessToken) {
       try {
-        const res = await fetch(`${this.supabaseUrl}/rest/v1/carteira_entradas?select=*&order=created_at.desc`, {
-          method: 'GET',
-          headers: this.getHeaders()
+        const res = await this.authFetch(`${this.supabaseUrl}/rest/v1/carteira_entradas?select=*&order=created_at.desc`, {
+          method: 'GET'
         });
 
         if (res.ok) {
@@ -1495,7 +1488,13 @@ class Database {
       }
     }
 
-    entries = entries.filter(e => e.userId === this.user.id);
+    // Preserva entradas locais sem userId vinculando à conta ativa
+    entries = entries.filter(e => !e.userId || !this.user?.id || e.userId === this.user.id);
+    if (this.user?.id) {
+      entries.forEach(e => {
+        if (!e.userId) e.userId = this.user.id;
+      });
+    }
 
     if (filter.year && filter.year !== 'all') {
       entries = entries.filter(e => Number(e.year) === Number(filter.year));
@@ -1525,9 +1524,8 @@ class Database {
 
     if (this.supabaseUrl && this.supabaseKey && this.accessToken) {
       try {
-        await fetch(`${this.supabaseUrl}/rest/v1/carteira_entradas?id=eq.${encodeURIComponent(id)}`, {
-          method: 'DELETE',
-          headers: this.getHeaders()
+        await this.authFetch(`${this.supabaseUrl}/rest/v1/carteira_entradas?id=eq.${encodeURIComponent(id)}`, {
+          method: 'DELETE'
         });
       } catch (err) {
         console.warn('Falha ao excluir entrada da carteira na nuvem:', err);
@@ -1544,12 +1542,25 @@ class Database {
     const targetYear = filter.year && filter.year !== 'all' ? Number(filter.year) : null;
     const targetMonth = filter.month && filter.month !== 'all' ? Number(filter.month) : null;
 
-    // Filtra entradas
+    // Total Geral Acumulado de Todas as Épocas (Saldo Real em Caixa da Carteira)
+    const totalGeralEntradas = (walletEntries || []).reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const totalGeralRecebido = (walletEntries || [])
+      .filter(e => e.status === 'recebido')
+      .reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const totalGeralAReceber = (walletEntries || [])
+      .filter(e => e.status === 'a_receber')
+      .reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const totalGeralSaidas = (purchaseHistory || [])
+      .reduce((s, p) => s + (Number(p.totalSpent) || 0), 0);
+    const saldoGeralCarteira = totalGeralRecebido - totalGeralSaidas;
+    const saldoGeralProjetado = (totalGeralRecebido + totalGeralAReceber) - totalGeralSaidas;
+
+    // Filtra entradas para o período selecionado
     let filteredEntries = [...walletEntries];
     if (targetYear) filteredEntries = filteredEntries.filter(e => Number(e.year) === targetYear);
     if (targetMonth) filteredEntries = filteredEntries.filter(e => Number(e.month) === targetMonth);
 
-    // Filtra compras (saídas)
+    // Filtra compras (saídas) para o período selecionado
     let filteredPurchases = [...purchaseHistory];
     if (targetYear) filteredPurchases = filteredPurchases.filter(p => Number(p.year) === targetYear);
     if (targetMonth) filteredPurchases = filteredPurchases.filter(p => Number(p.month) === targetMonth);
@@ -1581,6 +1592,12 @@ class Database {
       totalSaidas,
       saldoDisponivel,
       saldoProjetado,
+      totalGeralEntradas,
+      totalGeralRecebido,
+      totalGeralAReceber,
+      totalGeralSaidas,
+      saldoGeralCarteira,
+      saldoGeralProjetado,
       entriesCount: filteredEntries.length,
       purchasesCount: filteredPurchases.length,
       byCategory: catMap,

@@ -64,7 +64,12 @@ body {
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
   padding-top: var(--safe-top);
-  padding-bottom: calc(var(--safe-bottom) + 80px); /* Espaço para FAB no polegar */
+  padding-bottom: calc(var(--safe-bottom) + 120px); /* Folga ampla para scroll livre acima dos banners */
+}
+
+/* Quando banner nativo AdMob estiver fixo no rodapé */
+body.has-native-ad-banner {
+  padding-bottom: calc(var(--safe-bottom) + 150px) !important;
 }
 
 .mobile-app-container {
@@ -228,7 +233,7 @@ body {
    ========================================================== */
 .fab-btn {
   position: fixed;
-  bottom: calc(var(--safe-bottom) + 1rem);
+  bottom: calc(var(--safe-bottom) + 80px);
   right: 1.25rem;
   width: 58px;
   height: 58px;
@@ -244,6 +249,10 @@ body {
   cursor: pointer;
   z-index: 900;
   transition: var(--transition);
+}
+
+body.has-native-ad-banner .fab-btn {
+  bottom: calc(var(--safe-bottom) + 95px) !important;
 }
 
 .fab-btn:active {
@@ -581,11 +590,15 @@ body {
 .bottom-sheet-content {
   background: #ffffff;
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  padding: 1.25rem 1.25rem calc(var(--safe-bottom) + 1.25rem) 1.25rem;
+  padding: 1.25rem 1.25rem calc(var(--safe-bottom) + 3.5rem) 1.25rem;
   max-height: 85vh;
   overflow-y: auto;
   box-shadow: var(--shadow-lg);
   animation: slideSheetUp 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+body.has-native-ad-banner .bottom-sheet-content {
+  padding-bottom: calc(var(--safe-bottom) + 5.5rem) !important;
 }
 
 @keyframes slideSheetUp {

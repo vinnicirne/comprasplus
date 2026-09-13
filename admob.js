@@ -80,6 +80,7 @@ class AdMobManager {
           margin: 0,
           isTesting: this.config.isTestMode
         });
+        document.body.classList.add('has-native-ad-banner');
         console.log('[AdMob Native] Banner nativo ativo no rodapé.');
         return;
       } catch (err) {
@@ -89,6 +90,32 @@ class AdMobManager {
 
     // Fallback: renderiza banner inline visual no container do app
     this.renderWebBanner();
+  }
+
+  /**
+   * Oculta o banner nativo temporariamente (ex: enquanto modais/bottom sheets estiverem abertos)
+   */
+  async hideBanner() {
+    if (this.isNativePluginAvailable && window.Capacitor?.Plugins?.AdMob) {
+      try {
+        await window.Capacitor.Plugins.AdMob.hideBanner();
+      } catch (_) {}
+    }
+    document.body.classList.remove('has-native-ad-banner');
+  }
+
+  /**
+   * Restaura a exibição do banner nativo após fechamento de modais
+   */
+  async resumeBanner() {
+    if (this.isNativePluginAvailable && window.Capacitor?.Plugins?.AdMob) {
+      try {
+        await window.Capacitor.Plugins.AdMob.resumeBanner();
+        document.body.classList.add('has-native-ad-banner');
+      } catch (_) {
+        this.showNativeBanner();
+      }
+    }
   }
 
   /**
