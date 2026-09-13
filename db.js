@@ -266,12 +266,13 @@ class Database {
   async setSession(sessionData, rememberMe = true) {
     this.accessToken = sessionData.access_token;
     this.user = sessionData.user || this.user;
+    this.sessionExpiresAt = sessionData.expires_at || (Date.now() / 1000 + (sessionData.expires_in || 3600));
 
     const toStore = {
       access_token: this.accessToken,
       refresh_token: sessionData.refresh_token,
       user: this.user,
-      expires_at: sessionData.expires_at || (Date.now() / 1000 + (sessionData.expires_in || 3600)),
+      expires_at: this.sessionExpiresAt,
       remember_me: rememberMe
     };
 
@@ -290,6 +291,43 @@ class Database {
     }
   }
 
+  async refreshSession() {
+    if (!this.supabaseUrl || !this.supabaseKey) return null;
+    try {
+      let cached = localStorage.getItem('compras_auth_session');
+      if (!cached) cached = sessionStorage.getItem('compras_auth_session');
+      let sessionData = cached ? JSON.parse(cached) : null;
+      if (!sessionData) sessionData = await this.getConfig('auth_session');
+
+      if (!sessionData || !sessionData.refresh_token) {
+        return null;
+      }
+
+      const endpoint = `${this.supabaseUrl}/auth/v1/token?grant_type=refresh_token`;
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'apikey': this.supabaseKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ refresh_token: sessionData.refresh_token })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        console.log('[Auth] Sessão Supabase renovada com sucesso.');
+        await this.setSession(data, sessionData.remember_me !== false);
+        return data;
+      } else {
+        const err = await res.json().catch(() => ({}));
+        console.warn('[Auth] Erro ao renovar token Supabase:', err);
+      }
+    } catch (e) {
+      console.warn('[Auth] Exceção ao renovar token:', e);
+    }
+    return null;
+  }
+
   async loadSession() {
     try {
       // 1. Tenta carregar do localStorage
@@ -299,22 +337,25 @@ class Database {
         cached = sessionStorage.getItem('compras_auth_session');
       }
 
+      let sessionData = null;
       if (cached) {
-        const parsed = JSON.parse(cached);
-        if (parsed && parsed.access_token) {
-          this.accessToken = parsed.access_token;
-          this.user = parsed.user;
-          return parsed;
-        }
+        sessionData = JSON.parse(cached);
+      } else {
+        // 3. Fallback para IndexedDB
+        sessionData = await this.getConfig('auth_session');
       }
 
-      // 3. Fallback para IndexedDB
-      const dbSession = await this.getConfig('auth_session');
-      if (dbSession && dbSession.access_token) {
-        this.accessToken = dbSession.access_token;
-        this.user = dbSession.user;
-        localStorage.setItem('compras_auth_session', JSON.stringify(dbSession));
-        return dbSession;
+      if (sessionData && sessionData.access_token) {
+        this.accessToken = sessionData.access_token;
+        this.user = sessionData.user;
+        this.sessionExpiresAt = sessionData.expires_at || null;
+
+        // Se o token estiver expirado ou a menos de 90s do vencimento, renova silenciosamente
+        if (this.sessionExpiresAt && (Date.now() / 1000) > (this.sessionExpiresAt - 90)) {
+          console.log('[Auth] Token salvo próximo da expiração, renovando...');
+          await this.refreshSession();
+        }
+        return sessionData;
       }
     } catch (_) {}
     return null;
@@ -343,9 +384,8 @@ class Database {
       throw new Error('Acesso restrito ao administrador do sistema.');
     }
     const endpoint = `${this.supabaseUrl}/rest/v1/user_profiles?select=*&order=created_at.desc`;
-    const res = await fetch(endpoint, {
-      method: 'GET',
-      headers: this.getHeaders()
+    const res = await this.authFetch(endpoint, {
+      method: 'GET'
     });
 
     if (!res.ok) {
@@ -370,9 +410,8 @@ class Database {
       let totalItems = 0;
 
       try {
-        const resLists = await fetch(`${this.supabaseUrl}/rest/v1/listas?select=id,budget,items`, {
-          method: 'GET',
-          headers: this.getHeaders()
+        const resLists = await this.authFetch(`${this.supabaseUrl}/rest/v1/listas?select=id,budget,items`, {
+          method: 'GET'
         });
         if (resLists.ok) {
           const listsData = await resLists.json();
@@ -407,6 +446,43 @@ class Database {
       'Authorization': authHeader,
       'Content-Type': 'application/json'
     };
+  }
+
+  /**
+   * Executa fetch com auto-renovação de token JWT expirado
+   */
+  async authFetch(url, options = {}) {
+    if (this.sessionExpiresAt && (Date.now() / 1000) > (this.sessionExpiresAt - 60)) {
+      await this.refreshSession();
+    }
+
+    const defaultHeaders = this.getHeaders();
+    const mergedHeaders = {
+      ...defaultHeaders,
+      ...(options.headers || {})
+    };
+
+    let res = await fetch(url, {
+      ...options,
+      headers: mergedHeaders
+    });
+
+    if (res.status === 401) {
+      console.warn('[Auth] Requisição retornou 401, tentando renovar sessão...');
+      const refreshed = await this.refreshSession();
+      if (refreshed && refreshed.access_token) {
+        const retryHeaders = {
+          ...this.getHeaders(),
+          ...(options.headers || {})
+        };
+        res = await fetch(url, {
+          ...options,
+          headers: retryHeaders
+        });
+      }
+    }
+
+    return res;
   }
 
   /**
@@ -464,7 +540,6 @@ class Database {
   async getLists() {
     await this.init();
 
-    // Se o usuário não estiver autenticado, retorna lista vazia imediatamente
     if (!this.isAuthenticated()) {
       return [];
     }
@@ -473,10 +548,7 @@ class Database {
     if (this.supabaseUrl && this.supabaseKey) {
       try {
         const endpoint = `${this.supabaseUrl}/rest/v1/listas?select=*&order=created_at.desc`;
-        const res = await fetch(endpoint, {
-          method: 'GET',
-          headers: this.getHeaders()
-        });
+        const res = await this.authFetch(endpoint, { method: 'GET' });
 
         if (res.ok) {
           const cloudData = await res.json();
@@ -486,8 +558,8 @@ class Database {
           // Busca permissões de compartilhamento atribuídas ao usuário
           let sharesMap = {};
           try {
-            const sharesRes = await fetch(`${this.supabaseUrl}/rest/v1/lista_compartilhamentos?select=*`, {
-              headers: this.getHeaders()
+            const sharesRes = await this.authFetch(`${this.supabaseUrl}/rest/v1/lista_compartilhamentos?select=*`, {
+              method: 'GET'
             });
             if (sharesRes.ok) {
               const shares = await sharesRes.json();
@@ -498,7 +570,7 @@ class Database {
             }
           } catch (_) {}
 
-          // Cache local para mesclar campos de status e date
+          // Cache local para mesclar campos
           let localMap = {};
           try {
             const localLists = await this.getLocalLists();
@@ -508,7 +580,7 @@ class Database {
           // Mapeia do schema do Supabase para o formato do app
           const mappedLists = cloudData.map(row => {
             const isOwner = row.user_id === this.user.id;
-            const permission = isOwner ? 'owner' : (sharesMap[row.id] || 'fechado');
+            const permission = isOwner ? 'owner' : (sharesMap[row.id] || localMap[row.id]?.permission || 'fechado');
             const local = localMap[row.id] || {};
             const listDate = row.date || local.date || (row.created_at ? row.created_at.split('T')[0] : new Date().toISOString().split('T')[0]);
             const listStatus = row.status || local.status || 'aberta';
@@ -533,13 +605,13 @@ class Database {
             const localLists = await this.getLocalLists();
             const localShared = localLists.filter(l => l.isShared);
             for (const s of localShared) {
-              if (!mappedLists.some(m => m.id === s.id)) {
+              if (!mappedLists.some(m => String(m.id) === String(s.id))) {
                 mappedLists.push(s);
               }
             }
           } catch (_) {}
 
-          // Atualiza o cache local no IndexedDB silenciosamente
+          // Atualiza o cache local no IndexedDB
           for (const list of mappedLists) {
             await this.saveLocalList(list);
           }
@@ -564,7 +636,6 @@ class Database {
       const request = store.getAll();
       request.onsuccess = () => {
         let lists = request.result || [];
-        // Filtra pelo ID do usuário autenticado ou listas compartilhadas com ele
         lists = lists.filter(l => (l.userId && l.userId === this.user.id) || l.isShared);
         lists.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         resolve(lists);
@@ -578,51 +649,68 @@ class Database {
     if (!this.isAuthenticated()) {
       return null;
     }
+
+    // Carrega versão local primeiro como base rápida
+    let local = null;
     try {
       const store = await this.getStore('listas', 'readonly');
-      const local = await new Promise((resolve) => {
+      local = await new Promise((resolve) => {
         const req = store.get(id);
         req.onsuccess = () => resolve(req.result || null);
         req.onerror = () => resolve(null);
       });
-      if (local && (!local.userId || (this.user && local.userId === this.user.id))) return local;
-
-      // Se id for string numérica ou número, tenta o formato alternativo
-      const altId = typeof id === 'number' ? String(id) : (!isNaN(Number(id)) ? Number(id) : null);
-      if (altId !== null) {
-        const altLocal = await new Promise((resolve) => {
-          const req = store.get(altId);
-          req.onsuccess = () => resolve(req.result || null);
-          req.onerror = () => resolve(null);
-        });
-        if (altLocal) return altLocal;
+      if (!local) {
+        const altId = typeof id === 'number' ? String(id) : (!isNaN(Number(id)) ? Number(id) : null);
+        if (altId !== null) {
+          local = await new Promise((resolve) => {
+            const req = store.get(altId);
+            req.onsuccess = () => resolve(req.result || null);
+            req.onerror = () => resolve(null);
+          });
+        }
       }
     } catch (err) {
       console.warn('Erro ao consultar IndexedDB:', err);
     }
 
-    // Fallback: Busca diretamente na nuvem (Supabase com token do usuário)
+    // Sempre busca a versão mais recente na nuvem (essencial para produtos de listas compartilhadas)
     if (this.supabaseUrl && this.supabaseKey) {
       try {
         const endpoint = `${this.supabaseUrl}/rest/v1/listas?id=eq.${encodeURIComponent(id)}&limit=1`;
-        const res = await fetch(endpoint, {
-          method: 'GET',
-          headers: this.getHeaders()
-        });
+        const res = await this.authFetch(endpoint, { method: 'GET' });
 
         if (res.ok) {
           const rows = await res.json();
           if (rows && rows.length > 0) {
             const row = rows[0];
+            const isOwner = row.user_id === this.user.id;
+            
+            let permission = isOwner ? 'owner' : (local?.permission || 'fechado');
+            if (!isOwner) {
+              try {
+                const sRes = await this.authFetch(`${this.supabaseUrl}/rest/v1/lista_compartilhamentos?or=(list_id.eq.${encodeURIComponent(id)},lista_id.eq.${encodeURIComponent(id)})&select=permission&limit=1`, { method: 'GET' });
+                if (sRes.ok) {
+                  const sRows = await sRes.json();
+                  if (sRows && sRows.length > 0) permission = sRows[0].permission;
+                }
+              } catch (_) {}
+            }
+
             const cloudList = {
               id: row.id,
-              userId: row.user_id || (this.user ? this.user.id : null),
+              userId: row.user_id,
               name: row.name,
               category: row.category,
               budget: Number(row.budget) || 0,
               items: Array.isArray(row.items) ? row.items : [],
-              createdAt: row.created_at || new Date().toISOString()
+              createdAt: row.created_at || new Date().toISOString(),
+              date: row.date || local?.date || (row.created_at ? row.created_at.split('T')[0] : new Date().toISOString().split('T')[0]),
+              status: row.status || local?.status || 'aberta',
+              concluidaAt: row.concluida_at || local?.concluidaAt || null,
+              isShared: !isOwner,
+              permission: permission
             };
+
             await this.saveLocalList(cloudList);
             return cloudList;
           }
@@ -632,54 +720,34 @@ class Database {
       }
     }
 
-    return null;
+    return local;
   }
 
   /**
-   * Salva uma lista no IndexedDB e sincroniza no Supabase (com user_id obrigatório)
+   * Salva uma lista no IndexedDB e sincroniza no Supabase
+   * Para colaboradores em modo aberto, envia PATCH sem alterar o owner da lista
    */
   async saveList(list) {
     if (!this.isAuthenticated()) {
       throw new Error('Você precisa estar autenticado para criar ou salvar listas.');
     }
 
-    if (!list.userId) {
+    if (!list.userId && !list.isShared) {
       list.userId = this.user.id;
     }
 
-    // 1. Salva localmente primeiro (garantia de velocidade e persistência offline)
+    // 1. Salva localmente primeiro
     await this.saveLocalList(list);
 
-    // 2. Tenta enviar para o Supabase se disponível
+    // 2. Sincroniza com o Supabase Cloud
     if (this.supabaseUrl && this.supabaseKey) {
       try {
-        const endpoint = `${this.supabaseUrl}/rest/v1/listas`;
-        const payload = {
-          id: list.id,
-          user_id: this.user.id,
-          name: list.name,
-          category: list.category,
-          budget: list.budget,
-          items: list.items || [],
-          created_at: list.createdAt
-        };
+        const isOwner = !list.isShared && (list.userId === this.user.id || !list.userId);
 
-        if (list.date) payload.date = list.date;
-        if (list.status) payload.status = list.status;
-        if (list.concluidaAt) payload.concluida_at = list.concluidaAt;
-
-        const res = await fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            ...this.getHeaders(),
-            'Prefer': 'resolution=merge-duplicates'
-          },
-          body: JSON.stringify(payload)
-        });
-
-        // Caso a coluna date ou status ainda não exista no Supabase (400), tenta o payload básico
-        if (!res.ok && res.status === 400) {
-          const basePayload = {
+        if (isOwner) {
+          // Dono da lista: faz UPSERT completo com user_id
+          const endpoint = `${this.supabaseUrl}/rest/v1/listas`;
+          const payload = {
             id: list.id,
             user_id: this.user.id,
             name: list.name,
@@ -688,13 +756,34 @@ class Database {
             items: list.items || [],
             created_at: list.createdAt
           };
-          await fetch(endpoint, {
+
+          if (list.date) payload.date = list.date;
+          if (list.status) payload.status = list.status;
+          if (list.concluidaAt) payload.concluida_at = list.concluidaAt;
+
+          await this.authFetch(endpoint, {
             method: 'POST',
             headers: {
-              ...this.getHeaders(),
               'Prefer': 'resolution=merge-duplicates'
             },
-            body: JSON.stringify(basePayload)
+            body: JSON.stringify(payload)
+          });
+        } else {
+          // Colaborador: atualiza via PATCH apenas os campos modificáveis, sem mexer no user_id
+          const endpoint = `${this.supabaseUrl}/rest/v1/listas?id=eq.${encodeURIComponent(list.id)}`;
+          const payload = {
+            items: list.items || []
+          };
+          if (list.budget !== undefined) payload.budget = list.budget;
+          if (list.status) payload.status = list.status;
+          if (list.concluidaAt) payload.concluida_at = list.concluidaAt;
+
+          await this.authFetch(endpoint, {
+            method: 'PATCH',
+            headers: {
+              'Prefer': 'return=representation'
+            },
+            body: JSON.stringify(payload)
           });
         }
       } catch (err) {
@@ -739,33 +828,98 @@ class Database {
 
   /**
    * Exclui uma lista do IndexedDB e do Supabase
+   * Para dono: remove a lista e seus vínculos na nuvem
+   * Para convidado/colaborador: desconecta da lista compartilhada
    */
   async deleteList(id) {
     if (!this.isAuthenticated()) {
       throw new Error('Você precisa estar autenticado para excluir listas.');
     }
-    // 1. Deleta localmente
-    const store = await this.getStore('listas', 'readwrite');
-    await new Promise((resolve, reject) => {
-      const request = store.delete(id);
-      request.onsuccess = () => resolve(true);
-      request.onerror = () => reject(request.error);
-    });
 
-    // 2. Deleta no Supabase
+    let isOwner = true;
+    try {
+      const list = await this.getListById(id);
+      if (list && list.isShared && list.userId !== this.user.id) {
+        isOwner = false;
+      }
+    } catch (_) {}
+
+    // 1. Deleta localmente do IndexedDB
+    try {
+      const store = await this.getStore('listas', 'readwrite');
+      await new Promise((resolve, reject) => {
+        const request = store.delete(id);
+        request.onsuccess = () => resolve(true);
+        request.onerror = () => reject(request.error);
+      });
+      if (!isNaN(Number(id))) {
+        const numStore = await this.getStore('listas', 'readwrite');
+        await new Promise((resolve) => {
+          const req = numStore.delete(Number(id));
+          req.onsuccess = () => resolve(true);
+          req.onerror = () => resolve(false);
+        });
+      }
+    } catch (err) {
+      console.warn('Erro ao excluir no IndexedDB:', err);
+    }
+
+    // 2. Remove de compartilhamentos salvos localmente
+    try {
+      const shares = JSON.parse(localStorage.getItem('compras_local_shares') || '[]');
+      const filtered = shares.filter(s => s.list_id !== id && s.lista_id !== id);
+      localStorage.setItem('compras_local_shares', JSON.stringify(filtered));
+    } catch (_) {}
+
+    // 3. Deleta no Supabase Cloud
     if (this.supabaseUrl && this.supabaseKey) {
       try {
-        const endpoint = `${this.supabaseUrl}/rest/v1/listas?id=eq.${id}`;
-        await fetch(endpoint, {
-          method: 'DELETE',
-          headers: this.getHeaders()
-        });
+        if (isOwner) {
+          // Dono: remove da tabela 'listas' (o CASCADE no BD remove os compartilhamentos)
+          await this.authFetch(`${this.supabaseUrl}/rest/v1/listas?id=eq.${encodeURIComponent(id)}`, {
+            method: 'DELETE'
+          });
+          // Remove explicitamente da tabela lista_compartilhamentos
+          await this.authFetch(`${this.supabaseUrl}/rest/v1/lista_compartilhamentos?or=(list_id.eq.${encodeURIComponent(id)},lista_id.eq.${encodeURIComponent(id)})`, {
+            method: 'DELETE'
+          });
+        } else {
+          // Convidado/Colaborador: remove o vínculo de compartilhamento dele
+          await this.authFetch(`${this.supabaseUrl}/rest/v1/lista_compartilhamentos?or=(list_id.eq.${encodeURIComponent(id)},lista_id.eq.${encodeURIComponent(id)})&shared_with_user_id=eq.${encodeURIComponent(this.user.id)}`, {
+            method: 'DELETE'
+          });
+          if (this.user.email) {
+            await this.authFetch(`${this.supabaseUrl}/rest/v1/lista_compartilhamentos?or=(list_id.eq.${encodeURIComponent(id)},lista_id.eq.${encodeURIComponent(id)})&shared_with_email=eq.${encodeURIComponent(this.user.email)}`, {
+              method: 'DELETE'
+            });
+          }
+        }
       } catch (err) {
         console.warn('Exclusão em nuvem falhou:', err);
       }
     }
 
     return true;
+  }
+
+  /**
+   * Limpa todas as listas de teste criadas pelo usuário
+   */
+  async deleteTestLists() {
+    const lists = await this.getLists();
+    const testLists = lists.filter(l => {
+      const name = (l.name || '').toLowerCase();
+      return name.includes('teste') || name.startsWith('test_') || name.startsWith('list_1');
+    });
+
+    for (const tl of testLists) {
+      try {
+        await this.deleteList(tl.id);
+      } catch (e) {
+        console.warn('Erro ao excluir lista teste:', tl.id, e);
+      }
+    }
+    return testLists.length;
   }
 
   /**
@@ -1477,17 +1631,16 @@ class Database {
     };
 
     if (this.supabaseUrl && this.supabaseKey && this.accessToken) {
-      const res = await fetch(`${this.supabaseUrl}/rest/v1/lista_compartilhamentos`, {
+      const res = await this.authFetch(`${this.supabaseUrl}/rest/v1/lista_compartilhamentos`, {
         method: 'POST',
         headers: {
-          ...this.getHeaders(),
           'Prefer': 'return=representation'
         },
         body: JSON.stringify(shareRecord)
       });
 
       if (!res.ok) {
-        const err = await res.json();
+        const err = await res.json().catch(() => ({}));
         throw new Error(err.message || 'Falha ao salvar compartilhamento na nuvem.');
       }
     }
@@ -1556,7 +1709,9 @@ class Database {
     // 1. Garante que a lista existe sincronizada no Supabase Cloud antes de gerar o compartilhamento
     if (this.supabaseUrl && this.supabaseKey && this.accessToken) {
       try {
-        list.userId = this.user.id;
+        if (!list.isShared) {
+          list.userId = this.user.id;
+        }
         await this.saveList(list);
       } catch (e) {
         console.warn('[Share] Aviso ao sincronizar lista base:', e);
@@ -1581,15 +1736,13 @@ class Database {
     if (this.supabaseUrl && this.supabaseKey && this.accessToken) {
       try {
         // Remove registros de convite anteriores desta lista para evitar conflitos
-        await fetch(`${this.supabaseUrl}/rest/v1/lista_compartilhamentos?or=(list_id.eq.${encodeURIComponent(listId)},lista_id.eq.${encodeURIComponent(listId)})&shared_with_email=eq.convite_link%40comprasplus.app`, {
-          method: 'DELETE',
-          headers: this.getHeaders()
+        await this.authFetch(`${this.supabaseUrl}/rest/v1/lista_compartilhamentos?or=(list_id.eq.${encodeURIComponent(listId)},lista_id.eq.${encodeURIComponent(listId)})&shared_with_email=eq.convite_link%40comprasplus.app`, {
+          method: 'DELETE'
         }).catch(() => {});
 
-        const res = await fetch(`${this.supabaseUrl}/rest/v1/lista_compartilhamentos?on_conflict=id`, {
+        const res = await this.authFetch(`${this.supabaseUrl}/rest/v1/lista_compartilhamentos?on_conflict=id`, {
           method: 'POST',
           headers: {
-            ...this.getHeaders(),
             'Prefer': 'resolution=merge-duplicates,return=representation'
           },
           body: JSON.stringify(shareRecord)
@@ -1836,9 +1989,8 @@ class Database {
     if (!this.isAuthenticated() || !this.supabaseUrl) return [];
 
     try {
-      const res = await fetch(`${this.supabaseUrl}/rest/v1/lista_compartilhamentos?or=(list_id.eq.${encodeURIComponent(listId)},lista_id.eq.${encodeURIComponent(listId)})&select=*`, {
-        method: 'GET',
-        headers: this.getHeaders()
+      const res = await this.authFetch(`${this.supabaseUrl}/rest/v1/lista_compartilhamentos?or=(list_id.eq.${encodeURIComponent(listId)},lista_id.eq.${encodeURIComponent(listId)})&select=*`, {
+        method: 'GET'
       });
       if (res.ok) return await res.json();
     } catch (_) {}
@@ -1852,9 +2004,8 @@ class Database {
     if (!this.isAuthenticated() || !this.supabaseUrl) return false;
 
     try {
-      const res = await fetch(`${this.supabaseUrl}/rest/v1/lista_compartilhamentos?id=eq.${shareId}`, {
-        method: 'DELETE',
-        headers: this.getHeaders()
+      const res = await this.authFetch(`${this.supabaseUrl}/rest/v1/lista_compartilhamentos?id=eq.${shareId}`, {
+        method: 'DELETE'
       });
       return res.ok;
     } catch (_) {

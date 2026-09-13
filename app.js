@@ -284,11 +284,9 @@ function renderDashboard() {
               <h3 class="card-lista-title" style="${isConcluida ? 'text-decoration: line-through; opacity: 0.85;' : ''}">${escapeHtml(list.name)}</h3>
               <span class="budget-tag" style="margin-top: 0.25rem;">${icon} ${escapeHtml(list.category)}</span>
             </div>
-            ${isOwner ? `
-              <button class="btn-trash" title="Excluir Lista" onclick="handleDeleteList('${list.id}', event)">
-                🗑️
-              </button>
-            ` : ''}
+            <button class="btn-trash" title="${isOwner ? 'Excluir Lista Permanentemente' : 'Sair da Lista Compartilhada'}" onclick="handleDeleteList('${list.id}', event)">
+              🗑️
+            </button>
           </div>
 
           <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-top: 0.5rem;">
@@ -330,15 +328,55 @@ function renderDashboard() {
 // Renderização: Detalhe da Lista (Itens & Orçamento)
 // ==========================================================
 
-async function renderListDetail(listId) {
-  let list = state.lists.find(l => String(l.id) === String(listId));
-  if (!list) {
-    try {
-      list = await db.getListById(listId);
-      if (list) state.lists.unshift(list);
-    } catch (e) {
-      console.warn('Erro ao buscar lista do banco:', e);
+let listSyncInterval = null;
+
+function stopListAutoSync() {
+  if (listSyncInterval) {
+    clearInterval(listSyncInterval);
+    listSyncInterval = null;
+  }
+}
+
+function startListAutoSync(listId) {
+  stopListAutoSync();
+  listSyncInterval = setInterval(async () => {
+    if (state.activeListId === String(listId) && !document.hidden) {
+      try {
+        const fresh = await db.getListById(listId);
+        if (fresh && state.activeListId === String(listId)) {
+          const idx = state.lists.findIndex(l => String(l.id) === String(listId));
+          if (idx !== -1) state.lists[idx] = fresh;
+          renderListDetailView(fresh);
+        }
+      } catch (_) {}
     }
+  }, 4000);
+}
+
+async function renderListDetail(listId) {
+  // 1. Renderiza imediatamente com dados em cache local se existirem (resposta instantânea)
+  let list = state.lists.find(l => String(l.id) === String(listId));
+  if (list) {
+    state.activeListId = String(list.id);
+    renderListDetailView(list);
+  }
+
+  // 2. Busca versão mais recente na nuvem (garante que produtos inseridos por parceiros apareçam)
+  try {
+    const cloudList = await db.getListById(listId);
+    if (cloudList) {
+      list = cloudList;
+      const idx = state.lists.findIndex(l => String(l.id) === String(listId));
+      if (idx !== -1) {
+        state.lists[idx] = cloudList;
+      } else {
+        state.lists.unshift(cloudList);
+      }
+      state.activeListId = String(cloudList.id);
+      renderListDetailView(cloudList);
+    }
+  } catch (e) {
+    console.warn('Erro ao atualizar lista em tempo real:', e);
   }
 
   if (!list) {
@@ -347,8 +385,11 @@ async function renderListDetail(listId) {
     return;
   }
 
-  state.activeListId = String(list.id);
+  // Inicia sincronização automática em segundo plano enquanto a lista estiver aberta
+  startListAutoSync(listId);
+}
 
+function renderListDetailView(list) {
   // Permissão da Lista
   const perm = db.getListPermission(list);
   const sharedBanner = document.getElementById('detalhe-shared-banner');
@@ -568,6 +609,7 @@ async function openList(listId, event) {
 }
 
 function showDashboard() {
+  stopListAutoSync();
   state.activeListId = null;
   const viewDash = document.getElementById('view-dashboard');
   const viewDetail = document.getElementById('view-lista-detalhe');
@@ -581,6 +623,7 @@ function showDashboard() {
 window.openList = openList;
 window.showDashboard = showDashboard;
 window.handleDeleteList = handleDeleteList;
+window.handleDeleteTestLists = handleDeleteTestLists;
 window.handleToggleItem = handleToggleItem;
 window.handleDeleteItem = handleDeleteItem;
 window.handleEditItemPrice = handleEditItemPrice;
@@ -631,15 +674,56 @@ function shareListWhatsApp() {
 }
 
 async function handleDeleteList(listId, event) {
-  if (event) event.stopPropagation();
-  const list = state.lists.find(l => l.id === listId);
-  if (!list) return;
+  if (event) {
+    event.stopPropagation();
+    event.preventDefault();
+  }
+  const list = state.lists.find(l => String(l.id) === String(listId));
+  const listName = list ? list.name : 'esta lista';
+  const isOwner = list ? (!list.isShared && (list.userId === db.getUser()?.id || !list.userId)) : true;
 
-  if (confirm(`Deseja realmente excluir a lista "${list.name}"?`)) {
+  const confirmMsg = isOwner 
+    ? `🗑️ Deseja realmente excluir permanentemente a lista "${listName}" e todos os seus itens?`
+    : `🚪 Deseja sair e remover a lista compartilhada "${listName}" do seu aplicativo?`;
+
+  if (confirm(confirmMsg)) {
     vibrateDevice(35);
-    await db.deleteList(listId);
-    state.lists = state.lists.filter(l => l.id !== listId);
+    try {
+      await db.deleteList(listId);
+      state.lists = state.lists.filter(l => String(l.id) !== String(listId));
+      if (state.activeListId === String(listId)) {
+        stopListAutoSync();
+        showDashboard();
+      } else {
+        renderDashboard();
+      }
+    } catch (err) {
+      alert('Erro ao excluir lista: ' + (err.message || err));
+    }
+  }
+}
+
+async function handleDeleteTestLists() {
+  const testLists = state.lists.filter(l => {
+    const name = (l.name || '').toLowerCase();
+    return name.includes('teste') || name.startsWith('test_') || name.startsWith('list_1');
+  });
+
+  if (testLists.length === 0) {
+    alert('Nenhuma lista de teste encontrada para apagar.');
+    return;
+  }
+
+  const confirmMsg = `🧹 Deseja excluir ${testLists.length} ${testLists.length === 1 ? 'lista de teste' : 'listas de teste'} de uma só vez?\n\n` +
+    testLists.map(l => `• ${l.name}`).slice(0, 8).join('\n') +
+    (testLists.length > 8 ? `\n...e mais ${testLists.length - 8}` : '');
+
+  if (confirm(confirmMsg)) {
+    vibrateDevice(40);
+    const count = await db.deleteTestLists();
+    state.lists = await db.getLists();
     renderDashboard();
+    alert(`✅ ${count} listas de teste foram excluídas com sucesso! Agora você pode criar e usar suas listas reais.`);
   }
 }
 
@@ -1119,7 +1203,21 @@ function setupEventListeners() {
     });
   }
 
-  // Ações de Compartilhamento no Detalhe da Lista
+  const btnDashLimparTestes = document.getElementById('btn-dashboard-limpar-testes');
+  if (btnDashLimparTestes) {
+    btnDashLimparTestes.addEventListener('click', handleDeleteTestLists);
+  }
+
+  // Ações de Compartilhamento e Exclusão no Detalhe da Lista
+  const btnDetalheExcluirLista = document.getElementById('btn-detalhe-excluir-lista');
+  if (btnDetalheExcluirLista) {
+    btnDetalheExcluirLista.addEventListener('click', () => {
+      if (state.activeListId) {
+        handleDeleteList(state.activeListId);
+      }
+    });
+  }
+
   const btnDetalheCompartilhar = document.getElementById('btn-detalhe-compartilhar');
   if (btnDetalheCompartilhar) {
     btnDetalheCompartilhar.addEventListener('click', openCompartilharModal);
@@ -2342,7 +2440,12 @@ let activeSharingList = null;
 
 async function openCompartilharModal() {
   if (!state.activeListId) return;
-  const list = state.lists.find(l => l.id === state.activeListId);
+  let list = state.lists.find(l => String(l.id) === String(state.activeListId));
+  if (!list) {
+    try {
+      list = await db.getListById(state.activeListId);
+    } catch (_) {}
+  }
   if (!list) return;
 
   if (!db.isAuthenticated()) {
@@ -2378,7 +2481,8 @@ async function openCompartilharModal() {
 }
 
 async function handleRenovarCodigoShare() {
-  if (!activeSharingList) return;
+  const targetId = activeSharingList?.id || state.activeListId;
+  if (!targetId) return;
   const btn = document.getElementById('btn-renovar-codigo-share');
   const displayCode = document.getElementById('share-display-code');
   const statusMsg = document.getElementById('share-code-status-msg');
@@ -2390,10 +2494,12 @@ async function handleRenovarCodigoShare() {
   }
 
   try {
-    const codeObj = await db.createShareInviteCode(activeSharingList.id, perm, true); // forceNew = true
+    const codeObj = await db.createShareInviteCode(targetId, perm, true); // forceNew = true
     if (displayCode) displayCode.textContent = codeObj.inviteCode;
-    activeSharingList.inviteCode = codeObj.inviteCode;
-    activeSharingList.shareLink = codeObj.shareLink;
+    if (activeSharingList) {
+      activeSharingList.inviteCode = codeObj.inviteCode;
+      activeSharingList.shareLink = codeObj.shareLink;
+    }
     vibrateDevice(30);
 
     if (statusMsg) {
@@ -2453,13 +2559,18 @@ window.handleRemoveCollaborator = async function(shareId) {
   if (confirm('Deseja revogar o acesso deste usuário à sua lista?')) {
     vibrateDevice(20);
     await db.removeCollaborator(shareId);
-    if (activeSharingList) renderCollaboratorsList(activeSharingList.id);
+    const targetId = activeSharingList?.id || state.activeListId;
+    if (targetId) renderCollaboratorsList(targetId);
   }
 };
 
 async function handleShareEmail(e) {
   e.preventDefault();
-  if (!activeSharingList) return;
+  const targetId = activeSharingList?.id || activeSharingList?.list_id || state.activeListId;
+  if (!targetId) {
+    alert('Erro: Nenhuma lista selecionada para compartilhar.');
+    return;
+  }
   const emailInput = document.getElementById('share-input-email');
   const email = emailInput.value.trim();
   const perm = document.querySelector('input[name="share-permission"]:checked')?.value || 'fechado';
@@ -2469,13 +2580,13 @@ async function handleShareEmail(e) {
   btn.textContent = 'Enviando...';
 
   try {
-    await db.shareListWithEmail(activeSharingList.id, email, perm);
+    await db.shareListWithEmail(targetId, email, perm);
     vibrateDevice(25);
     alert(`Lista compartilhada com sucesso com ${email} no ${perm === 'aberto' ? 'Modo Aberto (Editar)' : 'Modo Fechado (Apenas Ver)'}!`);
     emailInput.value = '';
-    renderCollaboratorsList(activeSharingList.id);
+    renderCollaboratorsList(targetId);
   } catch (err) {
-    alert('Erro ao compartilhar lista: ' + err.message);
+    alert('Erro ao compartilhar lista: ' + (err.message || err));
   } finally {
     btn.disabled = false;
     btn.textContent = 'Enviar';
