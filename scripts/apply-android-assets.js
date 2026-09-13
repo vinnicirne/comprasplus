@@ -52,12 +52,32 @@ try {
   const varsFile = path.join(rootDir, 'android', 'variables.gradle');
   if (fs.existsSync(varsFile)) {
     let varsContent = fs.readFileSync(varsFile, 'utf8');
-    if (varsContent.includes('compileSdkVersion = 34')) {
-      varsContent = varsContent.replace(/compileSdkVersion = 34/g, 'compileSdkVersion = 35')
-                               .replace(/targetSdkVersion = 34/g, 'targetSdkVersion = 35');
+    if (varsContent.includes('compileSdkVersion = 34') || !varsContent.includes('compileSdkVersion = 35')) {
+      varsContent = varsContent.replace(/compileSdkVersion = \d+/g, 'compileSdkVersion = 35')
+                               .replace(/targetSdkVersion = \d+/g, 'targetSdkVersion = 35');
       fs.writeFileSync(varsFile, varsContent, 'utf8');
       console.log('✅ android/variables.gradle atualizado com compileSdkVersion = 35');
     }
+  }
+
+  // Garante que AndroidManifest.xml tenha o App ID do AdMob
+  const manifestFile = path.join(rootDir, 'android', 'app', 'src', 'main', 'AndroidManifest.xml');
+  if (fs.existsSync(manifestFile)) {
+    let manifestContent = fs.readFileSync(manifestFile, 'utf8');
+    const admobAppId = 'ca-app-pub-2871403878275209~7634642461';
+    if (!manifestContent.includes(admobAppId)) {
+      const metaTag = `\n        <!-- Google Mobile Ads (AdMob) App ID -->\n        <meta-data\n            android:name="com.google.android.gms.ads.APPLICATION_ID"\n            android:value="${admobAppId}" />\n`;
+      manifestContent = manifestContent.replace('</application>', `${metaTag}    </application>`);
+      fs.writeFileSync(manifestFile, manifestContent, 'utf8');
+      console.log('✅ AndroidManifest.xml atualizado com App ID do AdMob');
+    }
+  }
+
+  // Garante que o ic_launcher_background.xml use a cor azul oficial #0184EC
+  const bgValFile = path.join(destRes, 'values', 'ic_launcher_background.xml');
+  if (fs.existsSync(bgValFile)) {
+    const valContent = `<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">#0184EC</color>\n</resources>\n`;
+    fs.writeFileSync(bgValFile, valContent, 'utf8');
   }
 } catch (err) {
   console.error('Erro ao aplicar assets Android:', err);

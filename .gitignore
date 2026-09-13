@@ -2,8 +2,8 @@
 node_modules/
 
 # Builds
-android/
-www/
+/android/
+/www/
 
 # Sistema operacional
 .DS_Store

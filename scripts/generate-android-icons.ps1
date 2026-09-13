@@ -1,15 +1,20 @@
 Add-Type -AssemblyName System.Drawing
 
-$srcPath = Join-Path $PSScriptRoot "..\icons\icon-512.png"
-if (-not (Test-Path $srcPath)) {
-    Write-Error "Source icon not found at $srcPath"
+$srcIcon512 = Join-Path $PSScriptRoot "..\icons\icon-512.png"
+$srcIconMaskable = Join-Path $PSScriptRoot "..\icons\icon-maskable.png"
+
+if (-not (Test-Path $srcIcon512)) {
+    Write-Error "Source icon not found at $srcIcon512"
     exit 1
 }
 
-$srcBmp = [System.Drawing.Bitmap]::FromFile($srcPath)
-Write-Host "Source image size: $($srcBmp.Width)x$($srcBmp.Height)"
+$bmp512 = [System.Drawing.Bitmap]::FromFile($srcIcon512)
+$bmpMaskable = [System.Drawing.Bitmap]::FromFile($srcIconMaskable)
 
-$resDir = Join-Path $PSScriptRoot "..\android\app\src\main\res"
+$targetDirs = @(
+    (Join-Path $PSScriptRoot "..\android\app\src\main\res"),
+    (Join-Path $PSScriptRoot "..\resources\android\res")
+)
 
 $densities = @(
     @{ Name = "mipmap-mdpi";    LauncherSize = 48;  FgSize = 108 },
@@ -44,7 +49,6 @@ function Resize-Image {
     $graphics.DrawImage($source, $destRect, 0, 0, $source.Width, $source.Height, [System.Drawing.GraphicsUnit]::Pixel)
     $graphics.Dispose()
 
-    # If file exists, remove it first
     if (Test-Path $outputPath) {
         Remove-Item $outputPath -Force
     }
@@ -53,31 +57,40 @@ function Resize-Image {
     Write-Host "Generated: $outputPath ($targetWidth x $targetHeight)"
 }
 
-foreach ($d in $densities) {
-    $folder = Join-Path $resDir $d.Name
-    if (-not (Test-Path $folder)) {
-        New-Item -ItemType Directory -Path $folder -Force | Out-Null
+foreach ($resDir in $targetDirs) {
+    if (-not (Test-Path $resDir)) {
+        New-Item -ItemType Directory -Path $resDir -Force | Out-Null
     }
 
-    # 1. ic_launcher.png (standard icon)
-    $launcherPath = Join-Path $folder "ic_launcher.png"
-    Resize-Image -source $srcBmp -targetWidth $d.LauncherSize -targetHeight $d.LauncherSize -scaleFactor 1.0 -outputPath $launcherPath
+    foreach ($d in $densities) {
+        $folder = Join-Path $resDir $d.Name
+        if (-not (Test-Path $folder)) {
+            New-Item -ItemType Directory -Path $folder -Force | Out-Null
+        }
 
-    # 2. ic_launcher_round.png (round icon)
-    $roundPath = Join-Path $folder "ic_launcher_round.png"
-    Resize-Image -source $srcBmp -targetWidth $d.LauncherSize -targetHeight $d.LauncherSize -scaleFactor 1.0 -outputPath $roundPath
+        # 1. ic_launcher.png (standard icon from icon-512)
+        $launcherPath = Join-Path $folder "ic_launcher.png"
+        Resize-Image -source $bmp512 -targetWidth $d.LauncherSize -targetHeight $d.LauncherSize -scaleFactor 1.0 -outputPath $launcherPath
 
-    # 3. ic_launcher_foreground.png (adaptive foreground, scaled to ~70% so safe zone fits)
-    $fgPath = Join-Path $folder "ic_launcher_foreground.png"
-    Resize-Image -source $srcBmp -targetWidth $d.FgSize -targetHeight $d.FgSize -scaleFactor 0.72 -outputPath $fgPath
-}
+        # 2. ic_launcher_round.png (round icon from icon-512)
+        $roundPath = Join-Path $folder "ic_launcher_round.png"
+        Resize-Image -source $bmp512 -targetWidth $d.LauncherSize -targetHeight $d.LauncherSize -scaleFactor 1.0 -outputPath $roundPath
 
-# Update splash screen in drawable as well
-$drawableFolder = Join-Path $resDir "drawable"
-if (Test-Path $drawableFolder) {
+        # 3. ic_launcher_foreground.png (adaptive foreground from icon-maskable: full bleed blue gradient)
+        $fgPath = Join-Path $folder "ic_launcher_foreground.png"
+        Resize-Image -source $bmpMaskable -targetWidth $d.FgSize -targetHeight $d.FgSize -scaleFactor 1.0 -outputPath $fgPath
+    }
+
+    # Splash screen in drawable
+    $drawableFolder = Join-Path $resDir "drawable"
+    if (-not (Test-Path $drawableFolder)) {
+        New-Item -ItemType Directory -Path $drawableFolder -Force | Out-Null
+    }
     $splashPath = Join-Path $drawableFolder "splash.png"
-    Resize-Image -source $srcBmp -targetWidth 480 -targetHeight 480 -scaleFactor 0.85 -outputPath $splashPath
+    Resize-Image -source $bmp512 -targetWidth 480 -targetHeight 480 -scaleFactor 0.90 -outputPath $splashPath
 }
 
-$srcBmp.Dispose()
-Write-Host "SUCCESS: All Android launcher icons and foregrounds have been updated!"
+$bmp512.Dispose()
+$bmpMaskable.Dispose()
+
+Write-Host "SUCCESS: All Android launcher icons and foregrounds have been updated in both android/ and resources/!"

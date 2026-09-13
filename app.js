@@ -623,7 +623,6 @@ function showDashboard() {
 window.openList = openList;
 window.showDashboard = showDashboard;
 window.handleDeleteList = handleDeleteList;
-window.handleDeleteTestLists = handleDeleteTestLists;
 window.handleToggleItem = handleToggleItem;
 window.handleDeleteItem = handleDeleteItem;
 window.handleEditItemPrice = handleEditItemPrice;
@@ -700,30 +699,6 @@ async function handleDeleteList(listId, event) {
     } catch (err) {
       alert('Erro ao excluir lista: ' + (err.message || err));
     }
-  }
-}
-
-async function handleDeleteTestLists() {
-  const testLists = state.lists.filter(l => {
-    const name = (l.name || '').toLowerCase();
-    return name.includes('teste') || name.startsWith('test_') || name.startsWith('list_1');
-  });
-
-  if (testLists.length === 0) {
-    alert('Nenhuma lista de teste encontrada para apagar.');
-    return;
-  }
-
-  const confirmMsg = `🧹 Deseja excluir ${testLists.length} ${testLists.length === 1 ? 'lista de teste' : 'listas de teste'} de uma só vez?\n\n` +
-    testLists.map(l => `• ${l.name}`).slice(0, 8).join('\n') +
-    (testLists.length > 8 ? `\n...e mais ${testLists.length - 8}` : '');
-
-  if (confirm(confirmMsg)) {
-    vibrateDevice(40);
-    const count = await db.deleteTestLists();
-    state.lists = await db.getLists();
-    renderDashboard();
-    alert(`✅ ${count} listas de teste foram excluídas com sucesso! Agora você pode criar e usar suas listas reais.`);
   }
 }
 
@@ -1201,11 +1176,6 @@ function setupEventListeners() {
         if (input) input.focus();
       }, 200);
     });
-  }
-
-  const btnDashLimparTestes = document.getElementById('btn-dashboard-limpar-testes');
-  if (btnDashLimparTestes) {
-    btnDashLimparTestes.addEventListener('click', handleDeleteTestLists);
   }
 
   // Ações de Compartilhamento e Exclusão no Detalhe da Lista
