@@ -63,11 +63,6 @@ class AdMobManager {
     // 2. Renderiza banners na interface visual (Web/PWA ou fallback visual)
     this.renderWebBanner();
     this.renderNativeAd('admob-native-slot');
-
-    // 3. Exibe anúncio de Abertura do App (App Open Ad) após carregamento inicial
-    setTimeout(() => {
-      this.showAppOpenAd();
-    }, 1500);
   }
 
   /**
@@ -186,32 +181,23 @@ class AdMobManager {
   }
 
   /**
-   * Exibe anúncio de Abertura do App (App Open Ad)
+   * Exibe anúncio de Abertura do App (App Open Ad nativo se disponível)
    */
   async showAppOpenAd() {
     if (this.hasShownAppOpen) return;
-    this.hasShownAppOpen = true;
 
-    // Ambiente nativo Capacitor
+    // Apenas no ambiente nativo Capacitor com SDK real
     if (this.isNativePluginAvailable && window.Capacitor?.Plugins?.AdMob) {
       try {
+        this.hasShownAppOpen = true;
         const { AdMob } = window.Capacitor.Plugins;
         const unitId = this.config.isTestMode ? this.config.testUnits.appOpen : this.config.units.appOpen;
         await AdMob.prepareAppOpen({ adId: unitId });
         await AdMob.showAppOpen();
-        return;
       } catch (err) {
-        console.warn('[AdMob Native] Falha ao exibir App Open nativo:', err);
+        console.warn('[AdMob Native] App Open nativo não carregado:', err);
       }
     }
-
-    // Exibe overlay elegante de boas-vindas
-    this.displayWebOverlayAd({
-      type: 'Anúncio de Abertura • Google AdMob Teste',
-      duration: 3,
-      headline: 'Compras Plus & Economia Inteligente',
-      subtext: 'Economize até 30% todo mês planejando suas compras com cálculo em tempo real.'
-    });
   }
 
   /**
