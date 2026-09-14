@@ -93,15 +93,15 @@ export async function getWalletEntries() {
         const cloudIds = new Set(data.map(d => d.id));
         const unsynced = userLocals.filter(l => !cloudIds.has(l.id));
 
-        for (const uns of unsynced) {
-          supabase.from('carteira_entradas').upsert({
+        const upsertPromises = unsynced.map(uns => {
+          const cloudPayload = {
             id: uns.id,
             user_id: user.id,
             description: uns.description,
-            amount: uns.amount,
+            amount: Number(uns.amount) || 0,
             type: uns.type || 'entrada',
-            category: uns.category,
-            status: uns.status,
+            category: uns.category || (uns.type === 'saida' ? 'Geral' : 'Salário'),
+            status: uns.status || (uns.type === 'saida' ? 'a_pagar' : 'recebido'),
             due_date: uns.dueDate || null,
             paid_at: uns.paidAt || null,
             is_recurrent: uns.isRecurrent || false,
@@ -111,13 +111,40 @@ export async function getWalletEntries() {
             installment_total: uns.installmentTotal || null,
             parent_id: uns.parentId || null,
             related_list_id: uns.relatedListId || null,
-            entry_date: uns.entryDate,
-            day: uns.day,
-            month: uns.month,
-            year: uns.year,
-            created_at: uns.createdAt
-          }).then(() => {}).catch(() => {});
-        }
+            entry_date: uns.entryDate || new Date().toISOString().split('T')[0],
+            day: uns.day || new Date().getDate(),
+            month: uns.month || (new Date().getMonth() + 1),
+            year: uns.year || new Date().getFullYear(),
+            created_at: uns.createdAt || new Date().toISOString()
+          };
+
+          return supabase.from('carteira_entradas').upsert(cloudPayload).then(({ error }) => {
+            if (error) {
+              if (error.code === 'PGRST204' || error.message?.includes('column')) {
+                 const fallbackPayload = {
+                   id: cloudPayload.id,
+                   user_id: cloudPayload.user_id,
+                   description: cloudPayload.description,
+                   amount: cloudPayload.amount,
+                   category: cloudPayload.category,
+                   status: cloudPayload.status,
+                   entry_date: cloudPayload.entry_date,
+                   day: cloudPayload.day,
+                   month: cloudPayload.month,
+                   year: cloudPayload.year,
+                   created_at: cloudPayload.created_at
+                 };
+                 return supabase.from('carteira_entradas').upsert(fallbackPayload).then(({ error: fbErr }) => {
+                    if (fbErr) console.error('Erro no fallback do sync', uns.id, fbErr.message);
+                 });
+              } else {
+                 console.error('Erro ao sync entrada', uns.id, error.message);
+              }
+            }
+          }).catch(err => console.error('Falha catch no sync', err));
+        });
+
+        await Promise.all(upsertPromises);
 
         const merged = [
           ...data.map(row => {
