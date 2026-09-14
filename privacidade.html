@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Política de Privacidade - Compras Plus</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            "primary": "#006948",
+            "surface": "#faf8ff",
+            "on-surface": "#131b2e",
+            "on-surface-variant": "#3d4a42",
+            "surface-container-lowest": "#ffffff"
+          },
+          fontFamily: {
+            "body": ["Plus Jakarta Sans", "sans-serif"]
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-surface font-body text-on-surface">
+  <header class="fixed top-0 inset-x-0 z-50 bg-surface/90 backdrop-blur-md shadow-sm">
+    <div class="h-16 px-4 flex items-center gap-4">
+      <button onclick="history.back()" class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-black/5 transition-colors">
+        <span class="material-symbols-outlined">arrow_back</span>
+      </button>
+      <h1 class="text-lg font-bold">Política de Privacidade</h1>
+    </div>
+  </header>
+  <main class="pt-20 pb-10 px-6 max-w-2xl mx-auto">
+    <div class="bg-surface-container-lowest p-6 rounded-2xl shadow-sm">
+      <h2 class="text-xl font-bold mb-4 text-primary">1. Coleta de Dados</h2>
+      <p class="text-on-surface-variant mb-4">A sua privacidade é importante para nós. Coletamos apenas as informações essenciais (nome, e-mail e dados de listas de compras) para o funcionamento e a melhoria do Compras Plus.</p>
+      
+      <h2 class="text-xl font-bold mb-4 text-primary">2. Uso das Informações</h2>
+      <p class="text-on-surface-variant mb-4">Os dados coletados são usados exclusivamente para sincronização entre dispositivos, cálculo de orçamento e compartilhamento seguro das suas listas com usuários autorizados por você.</p>
+      
+      <h2 class="text-xl font-bold mb-4 text-primary">3. Segurança</h2>
+      <p class="text-on-surface-variant mb-4">Empregamos práticas de segurança e criptografia no trânsito de informações para proteger seus dados pessoais contra acesso, alteração ou destruição não autorizada.</p>
+    </div>
+  </main>
+</body>
+</html>

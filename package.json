@@ -5,7 +5,7 @@
   "type": "module",
   "main": "index.html",
   "scripts": {
-    "build": "node scripts/generate-env.js && vite build && node scripts/prepare-www.js",
+    "build": "node scripts/generate-env.js && node scripts/prepare-www.js",
     "dev:legacy": "npx serve -l 3000 legacy",
     "dev": "vite",
     "build:vite": "vite build",
