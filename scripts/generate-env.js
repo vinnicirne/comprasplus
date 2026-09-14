@@ -73,7 +73,18 @@ window.__ENV__ = {
 `;
 
 fs.writeFileSync(targetPath, fileContent, 'utf8');
-console.log('✅ env.js gerado com sucesso!');
+
+const publicEnvPath = path.join(rootDir, 'public', 'env.js');
+if (fs.existsSync(path.join(rootDir, 'public'))) {
+  fs.writeFileSync(publicEnvPath, fileContent, 'utf8');
+}
+
+const wwwEnvPath = path.join(rootDir, 'www', 'env.js');
+if (fs.existsSync(path.join(rootDir, 'www'))) {
+  fs.writeFileSync(wwwEnvPath, fileContent, 'utf8');
+}
+
+console.log('✅ env.js gerado com sucesso em root, public/ e www/!');
 if (supabaseUrl) {
   console.log('   NEXT_PUBLIC_SUPABASE_URL configurada:', supabaseUrl.replace(/(https:\/\/[^.]+).*/, '$1.supabase.co'));
 } else {
