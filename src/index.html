@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Compras Plus</title>
+  
+  <link rel="icon" type="image/png" href="/icons/favicon.png">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#059669">
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet">
+</head>
+<body class="font-body-md text-on-surface bg-surface min-h-screen">
+  <div id="app" class="mobile-app-container">
+    <div id="main-app-shell" class="main-app-shell hidden">
+      <header id="main-app-header" class="sticky top-0 z-50 bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] pt-safe">
+        <div class="h-16 px-4 flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <img src="/icons/icon-192.png" alt="Compras Plus Logo" class="h-9 w-9 rounded-xl object-contain shrink-0 shadow-sm">
+            <span class="font-extrabold text-lg tracking-tight text-on-surface">Compras <span class="text-primary font-black">Plus</span></span>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <button id="btn-header-auth" title="Meu Perfil"
+              class="flex items-center gap-1.5 h-9 px-3 rounded-full border border-outline-variant/40 bg-surface-container text-on-surface text-[13px] font-semibold hover:bg-surface-container-high active:scale-95 transition-all shadow-sm">
+              <span id="header-auth-icon" class="material-symbols-outlined text-primary text-[18px]">account_circle</span>
+              <span id="header-auth-label" class="max-w-[80px] truncate">Entrar</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <nav class="fixed bottom-0 inset-x-0 z-50 pb-safe bg-surface/90 backdrop-blur-xl shadow-[0_-4px_20px_rgba(0,105,72,0.06)]" id="app-main-nav">
+        <div class="flex justify-around items-center h-16 px-space-xs max-w-lg mx-auto">
+          <button type="button" class="app-nav-tab active flex flex-col items-center justify-center min-w-[56px] h-12 px-1 transition-all gap-0.5 text-primary font-label-md bg-primary-fixed/30 rounded-full" id="tab-nav-listas" data-target="/dashboard">
+            <span class="material-symbols-outlined text-[20px]">checklist</span>
+            <span class="font-label-sm text-[11px] leading-tight font-semibold">Listas</span>
+          </button>
+          <button type="button" class="app-nav-tab flex flex-col items-center justify-center min-w-[56px] h-12 px-1 text-on-surface-variant hover:text-on-surface transition-all gap-0.5" id="tab-nav-carteira" data-target="/carteira">
+            <span class="material-symbols-outlined text-[20px]">account_balance_wallet</span>
+            <span class="font-label-sm text-[11px] leading-tight font-semibold">Carteira</span>
+          </button>
+          <button type="button" class="app-nav-tab flex flex-col items-center justify-center min-w-[56px] h-12 px-1 text-on-surface-variant hover:text-on-surface transition-all gap-0.5" id="tab-nav-historico" data-target="/historico">
+            <span class="material-symbols-outlined text-[20px]">receipt_long</span>
+            <span class="font-label-sm text-[11px] leading-tight font-semibold">Histórico</span>
+          </button>
+          <button type="button" class="app-nav-tab flex flex-col items-center justify-center min-w-[56px] h-12 px-1 text-on-surface-variant hover:text-on-surface transition-all gap-0.5" id="tab-nav-perfil" data-target="/perfil">
+            <span class="material-symbols-outlined text-[20px]">person</span>
+            <span class="font-label-sm text-[11px] leading-tight font-semibold">Perfil</span>
+          </button>
+          <button type="button" class="app-nav-tab hidden flex flex-col items-center justify-center min-w-[56px] h-12 px-1 text-on-surface-variant hover:text-on-surface transition-all gap-0.5" id="tab-nav-admin" data-target="/admin">
+            <span class="material-symbols-outlined text-[20px]">shield_person</span>
+            <span class="font-label-sm text-[11px] leading-tight font-semibold">Admin</span>
+          </button>
+        </div>
+      </nav>
+      
+      <div id="router-view"></div>
+    </div>
+  </div>
+
+  <div id="toast-container" class="fixed top-4 inset-x-0 z-[99999] flex flex-col items-center gap-2 pointer-events-none px-4 max-w-md mx-auto"></div>
+  
+  <script src="/admob.js?v=2.4.0"></script>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

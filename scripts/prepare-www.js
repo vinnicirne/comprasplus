@@ -3,8 +3,12 @@
  * Prepara a pasta www para o Capacitor e compilação do APK
  */
 
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const rootDir = path.resolve(__dirname, '..');
 const wwwDir = path.join(rootDir, 'www');
@@ -26,7 +30,13 @@ const filesToCopy = [
 ];
 
 for (const file of filesToCopy) {
-  const src = path.join(rootDir, file);
+  let src = path.join(rootDir, file);
+  if (!fs.existsSync(src)) {
+    const legacySrc = path.join(rootDir, 'legacy', file);
+    if (fs.existsSync(legacySrc)) {
+      src = legacySrc;
+    }
+  }
   const dest = path.join(wwwDir, file);
   if (fs.existsSync(src)) {
     fs.copyFileSync(src, dest);

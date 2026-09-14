@@ -3,8 +3,12 @@
  * Aplica os icones oficiais e recursos visuais ao projeto Android recem-gerado
  */
 
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const rootDir = path.resolve(__dirname, '..');
 const srcRes = path.join(rootDir, 'resources', 'android', 'res');
@@ -73,11 +77,33 @@ try {
     }
   }
 
-  // Garante que o ic_launcher_background.xml use a cor azul oficial #0184EC
+  // Garante que o ic_launcher_background.xml use a cor verde esmeralda oficial #059669
   const bgValFile = path.join(destRes, 'values', 'ic_launcher_background.xml');
   if (fs.existsSync(bgValFile)) {
-    const valContent = `<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">#0184EC</color>\n</resources>\n`;
+    const valContent = `<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">#059669</color>\n</resources>\n`;
     fs.writeFileSync(bgValFile, valContent, 'utf8');
+  }
+
+  // Garante que strings.xml tenha o nome oficial 'Compras Plus'
+  const stringsFile = path.join(destRes, 'values', 'strings.xml');
+  if (fs.existsSync(stringsFile)) {
+    let stringsContent = fs.readFileSync(stringsFile, 'utf8');
+    stringsContent = stringsContent
+      .replace(/<string name="app_name">.*?<\/string>/, '<string name="app_name">Compras Plus</string>')
+      .replace(/<string name="title_activity_main">.*?<\/string>/, '<string name="title_activity_main">Compras Plus</string>');
+    fs.writeFileSync(stringsFile, stringsContent, 'utf8');
+    console.log('✅ android strings.xml atualizado com nome Compras Plus');
+  }
+
+  // Garante que build.gradle use versionCode 3 e versionName 1.2.0
+  const buildGradleFile = path.join(rootDir, 'android', 'app', 'build.gradle');
+  if (fs.existsSync(buildGradleFile)) {
+    let gradleContent = fs.readFileSync(buildGradleFile, 'utf8');
+    gradleContent = gradleContent
+      .replace(/versionCode \d+/g, 'versionCode 3')
+      .replace(/versionName "[^"]+"/g, 'versionName "1.2.0"');
+    fs.writeFileSync(buildGradleFile, gradleContent, 'utf8');
+    console.log('✅ android/app/build.gradle atualizado com versionCode 3 e versionName 1.2.0');
   }
 } catch (err) {
   console.error('Erro ao aplicar assets Android:', err);

@@ -67,26 +67,26 @@ jobs:
             exit 1
           fi
           echo "APK encontrado em: $APK_PATH"
-          cp "$APK_PATH" output-apk/ListaDeComprasPlus.apk
+          cp "$APK_PATH" output-apk/ComprasPlus.apk
 
       - name: Publicar APK como Artefato para Download
         uses: actions/upload-artifact@v4
         with:
-          name: ListaDeComprasPlus-APK
-          path: output-apk/ListaDeComprasPlus.apk
+          name: ComprasPlus-APK
+          path: output-apk/ComprasPlus.apk
           retention-days: 30
 
       - name: Criar Release no GitHub com Download Direto
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: "Lista de Compras Plus v1.0.${{ github.run_number }} (APK)"
+          tag_name: v1.2.${{ github.run_number }}
+          name: "Compras Plus v1.2.${{ github.run_number }} (APK)"
           body: |
             🎉 **APK Android Gerado com Sucesso!**
             
-            📱 Baixe o arquivo `ListaDeComprasPlus.apk` anexo abaixo para instalar diretamente no seu celular Android.
-          files: output-apk/ListaDeComprasPlus.apk
+            📱 Baixe o arquivo `ComprasPlus.apk` anexo abaixo para instalar diretamente no seu celular Android.
+          files: output-apk/ComprasPlus.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true

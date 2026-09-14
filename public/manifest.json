@@ -1,12 +1,12 @@
 {
-  "name": "Lista de Compras Plus",
+  "name": "Compras Plus",
   "short_name": "Compras Plus",
   "description": "Controle inteligente de compras com orçamento e dedução de saldo em tempo real.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#f4f6fa",
-  "theme_color": "#2563eb",
+  "background_color": "#002114",
+  "theme_color": "#006948",
   "orientation": "portrait-primary",
   "categories": ["shopping", "finance", "utilities"],
   "icons": [
@@ -32,12 +32,6 @@
       "src": "icons/favicon.png",
       "sizes": "64x64",
       "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "icons/favicon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
       "purpose": "any"
     }
   ],

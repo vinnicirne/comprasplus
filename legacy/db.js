@@ -35,6 +35,7 @@ class Database {
     this.initPromise = null;
     this.supabaseUrl = getInitialSupabaseUrl();
     this.supabaseKey = getInitialSupabaseKey();
+    this.supabaseClient = null;
     this.accessToken = null;
     this.user = null;
     this.isCloudOnline = false;
@@ -86,6 +87,10 @@ class Database {
       if (customUrl && customUrl.trim()) this.supabaseUrl = customUrl.trim();
       if (customKey && customKey.trim()) this.supabaseKey = customKey.trim();
     } catch (_) {}
+
+    if (window.supabase && this.supabaseUrl && this.supabaseKey) {
+      this.supabaseClient = window.supabase.createClient(this.supabaseUrl, this.supabaseKey);
+    }
   }
 
   /**

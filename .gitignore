@@ -4,6 +4,7 @@ node_modules/
 # Builds
 /android/
 /www/
+/dist/
 
 # Sistema operacional
 .DS_Store
@@ -13,4 +14,6 @@ desktop.ini
 # Logs e temporários
 *.log
 .env
+env.js
 .idea/
+scratch/

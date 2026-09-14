@@ -1,5 +1,5 @@
 /**
- * Service Worker - Lista de Compras Plus (PWA)
+ * Service Worker - Compras Plus (PWA)
  * Suporte completo a funcionamento offline, carregamento instantâneo
  * e estratégia Network-First para atualização imediata de arquivos do app.
  */

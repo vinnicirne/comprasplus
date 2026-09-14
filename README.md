@@ -1,4 +1,4 @@
-# 🛒 Lista de Compras Plus (PWA & Android)
+# 🛒 Compras Plus (PWA & Android)
 
 Um aplicativo web e mobile moderno, intuitivo e responsivo para gerenciamento de listas de compras com **controle de orçamento inteligente**, **saldo disponível em tempo real** e suporte a **instalação nativa (PWA e Android)**.
 

@@ -35,6 +35,51 @@ let state = {
 let deferredInstallPrompt = null;
 
 // ==========================================================
+// SISTEMA DE TOAST (Substitui alert/confirm/prompt nativo)
+// ==========================================================
+
+function showToast(msg, type = 'info', duration = 3500) {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+
+  const icons = { success: '✅', error: '❌', warning: '⚠️', info: 'ℹ️' };
+  const el = document.createElement('div');
+  el.className = `toast-item toast-${type}`;
+  el.innerHTML = `<span class="toast-icon">${icons[type] || '💡'}</span><span class="toast-text">${escapeHtml(msg)}</span>`;
+  container.appendChild(el);
+
+  setTimeout(() => {
+    el.classList.add('toast-hide');
+    setTimeout(() => el.remove(), 300);
+  }, duration);
+}
+
+// showConfirm: substitui confirm() com Promise
+function showConfirm(msg, title = 'Confirmar', icon = '⚠️', okLabel = '✅ Confirmar', okClass = 'btn-primary') {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('modal-confirm');
+    document.getElementById('modal-confirm-title').textContent = title;
+    document.getElementById('modal-confirm-msg').textContent = msg;
+    document.getElementById('modal-confirm-icon').textContent = icon;
+    const btnOk = document.getElementById('modal-confirm-ok');
+    const btnCancel = document.getElementById('modal-confirm-cancel');
+    btnOk.className = `btn ${okClass}`;
+    btnOk.textContent = okLabel;
+    modal.classList.remove('hidden');
+
+    const cleanup = (result) => {
+      modal.classList.add('hidden');
+      btnOk.replaceWith(btnOk.cloneNode(true));
+      btnCancel.replaceWith(btnCancel.cloneNode(true));
+      resolve(result);
+    };
+
+    document.getElementById('modal-confirm-ok').addEventListener('click', () => cleanup(true), { once: true });
+    document.getElementById('modal-confirm-cancel').addEventListener('click', () => cleanup(false), { once: true });
+  });
+}
+
+// ==========================================================
 // Funções Utilitárias & Formatação
 // ==========================================================
 
@@ -133,34 +178,32 @@ async function loadDataFromDb() {
   const isAuth = db.isAuthenticated();
   const isAdmin = db.isAdmin();
 
-  // Configuração só deve aparecer para o administrador
   const btnConfig = document.getElementById('btn-abrir-config');
   if (btnConfig) {
-    if (isAdmin) {
-      btnConfig.classList.remove('hidden');
-    } else {
-      btnConfig.classList.add('hidden');
-    }
+    if (isAdmin) btnConfig.classList.remove('hidden');
+    else btnConfig.classList.add('hidden');
   }
 
-  // Se o usuário NÃO estiver autenticado: bloqueia e abre login de imediato
   if (!isAuth) {
     state.lists = [];
     state.activeListId = null;
-
-    // Oculta telas de dados e botão FAB
     document.getElementById('view-dashboard').classList.add('hidden');
     document.getElementById('view-lista-detalhe').classList.add('hidden');
     const fab = document.getElementById('fab-action-btn');
     if (fab) fab.classList.add('hidden');
-
     updateAuthUI();
     lockAppWithAuthGate();
     return;
   }
 
-  // Usuário autenticado: libera o app
   unlockAppFromAuthGate();
+
+  // Roteamento por hash ao recarregar
+  const hash = window.location.hash;
+  if (hash.startsWith('#/listas/')) {
+    const lid = hash.replace('#/listas/', '');
+    state.activeListId = lid;
+  }
 
   if (state.activeListId) {
     document.getElementById('view-dashboard').classList.add('hidden');
@@ -178,6 +221,10 @@ async function loadDataFromDb() {
     renderDashboard();
     updateAuthUI();
     checkPendingInviteAfterLogin();
+    // Se veio de hash com lista aberta, abre ela
+    if (state.activeListId) {
+      await renderListDetail(state.activeListId);
+    }
   } catch (err) {
     console.error('Erro ao carregar dados do banco:', err);
     state.lists = [];
@@ -217,111 +264,162 @@ function unlockAppFromAuthGate() {
 function renderDashboard() {
   const container = document.getElementById('listas-container');
   const emptyState = document.getElementById('empty-state-listas');
-  const badgeTotal = document.getElementById('total-listas-badge');
+  
+  // Atualizar contadores de pílulas (Filtros)
+  const inProgress = state.lists.filter(l => l.status !== 'concluida');
+  const completed = state.lists.filter(l => l.status === 'concluida');
+  
+  const elCountAll = document.getElementById('filter-count-all');
+  const elCountProg = document.getElementById('filter-count-progress');
+  const elCountPend = document.getElementById('filter-count-pending');
+  const elCountComp = document.getElementById('filter-count-completed');
 
-  badgeTotal.textContent = `${state.lists.length} ${state.lists.length === 1 ? 'lista' : 'listas'}`;
+  if(elCountAll) elCountAll.textContent = state.lists.length;
+  if(elCountProg) elCountProg.textContent = inProgress.length;
+  if(elCountPend) elCountPend.textContent = '0'; // Simplificado
+  if(elCountComp) elCountComp.textContent = completed.length;
 
+  // Atualizar Hero Card
+  let totalOrcamento = 0;
+  let totalGasto = 0;
+  
+  state.lists.forEach(l => {
+    const { orcamento, totalGasto: gasto } = calculateListTotals(l);
+    totalOrcamento += orcamento;
+    totalGasto += gasto;
+  });
+  
+  const heroBudget = document.getElementById('hero-total-budget');
+  const heroSpent = document.getElementById('hero-total-spent');
+  const heroActiveCount = document.getElementById('hero-active-count');
+  const heroProgress = document.getElementById('hero-progress-bar');
+  const heroPercent = document.getElementById('hero-progress-percent');
+  const heroBadge = document.getElementById('hero-saving-badge');
+
+  if(heroBudget) heroBudget.textContent = formatCurrency(totalOrcamento).replace('R$','').trim();
+  if(heroSpent) heroSpent.textContent = formatCurrency(totalGasto);
+  if(heroActiveCount) heroActiveCount.textContent = inProgress.length;
+  
+  let percent = totalOrcamento > 0 ? (totalGasto / totalOrcamento) * 100 : 0;
+  if(heroProgress) heroProgress.style.width = `${Math.min(100, percent)}%`;
+  if(heroPercent) heroPercent.textContent = percent.toFixed(1);
+  
+  if (heroBadge) {
+    const restante = totalOrcamento - totalGasto;
+    if (restante >= 0) {
+      heroBadge.innerHTML = `Resta: ${formatCurrency(restante)} 🎉`;
+      heroBadge.className = "px-2 py-0.5 rounded-full bg-on-primary/15 text-secondary-fixed font-semibold text-[10px] flex items-center gap-1";
+    } else {
+      heroBadge.innerHTML = `Excedido: ${formatCurrency(Math.abs(restante))} ⚠️`;
+      heroBadge.className = "px-2 py-0.5 rounded-full bg-error text-on-error font-semibold text-[10px] flex items-center gap-1";
+    }
+  }
+
+  // Renderizar listas
   if (state.lists.length === 0) {
     container.innerHTML = '';
     emptyState.classList.remove('hidden');
+    emptyState.classList.add('flex');
     return;
   }
 
   emptyState.classList.add('hidden');
+  emptyState.classList.remove('flex');
 
   container.innerHTML = state.lists.map(list => {
     const { orcamento, totalGasto, saldoDisponivel, percentualConsumido } = calculateListTotals(list);
     
-    let saldoColor = 'var(--success-text)';
-    let progClass = 'prog-green';
-    let saldoStatus = 'Disponível';
-
+    let saldoColor = 'text-primary';
+    let progClass = 'bg-primary';
+    
     if (saldoDisponivel < 0) {
-      saldoColor = 'var(--danger-text)';
-      progClass = 'prog-red';
-      saldoStatus = 'Excedido';
+      saldoColor = 'text-error';
+      progClass = 'bg-error';
     } else if (percentualConsumido >= 75) {
-      saldoColor = 'var(--warning-text)';
-      progClass = 'prog-yellow';
-      saldoStatus = 'Atenção';
+      saldoColor = 'text-tertiary';
+      progClass = 'bg-tertiary';
     }
 
     const progressWidth = Math.min(100, Math.round(percentualConsumido));
-    const icon = getIcon(list.category);
+    let iconName = 'shopping_cart';
+    if(list.category === 'hortifruti') iconName = 'nutrition';
+    if(list.category === 'farmacia') iconName = 'medical_services';
+    if(list.category === 'festa') iconName = 'celebration';
+    if(list.category === 'outros') iconName = 'category';
+
     const qtdItens = (list.items || []).length;
+    const itensMarcados = (list.items || []).filter(i => i.checked).length;
+    let itemProgress = qtdItens > 0 ? (itensMarcados / qtdItens) * 100 : 0;
 
-      const isOwner = !list.isShared;
-      const isConcluida = list.status === 'concluida';
-      const listDateFormatted = formatDateBR(list.date || list.createdAt);
+    const isOwner = !list.isShared;
+    const isConcluida = list.status === 'concluida';
+    const listDateFormatted = formatDateBR(list.date || list.createdAt);
 
-      let badgeShared = '';
-      if (list.isShared) {
-        if (list.permission === 'aberto') {
-          badgeShared = '<span class="badge-shared-tag tag-aberto">🟢 Compartilhada (Modo Aberto)</span>';
-        } else {
-          badgeShared = '<span class="badge-shared-tag tag-fechado">🔒 Compartilhada (Apenas Leitura)</span>';
-        }
-      } else {
-        badgeShared = '<span class="badge-shared-tag tag-owner">👑 Minha Lista</span>';
-      }
+    let badgeStatus = '';
+    if (isConcluida) {
+      badgeStatus = `<span class="shrink-0 px-2.5 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant text-[11px] font-semibold flex items-center gap-1.5"><span class="material-symbols-outlined text-[12px] text-primary">check</span> Concluída</span>`;
+    } else if (list.isShared) {
+      badgeStatus = `<span class="shrink-0 px-2.5 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed text-[11px] font-bold flex items-center gap-1.5"><span class="material-symbols-outlined text-[14px]">group</span> Compartilhada</span>`;
+    } else {
+      badgeStatus = `<span class="shrink-0 px-2.5 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed text-[11px] font-bold flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span> Ativa</span>`;
+    }
 
-      const badgeConcluida = isConcluida 
-        ? '<span class="badge-shared-tag tag-concluida">✅ Concluída</span>' 
-        : '';
-      const badgeData = listDateFormatted 
-        ? `<span class="badge-shared-tag tag-data">📅 ${escapeHtml(listDateFormatted)}</span>` 
-        : '';
-
-      return `
-        <div class="card-lista-item ${isConcluida ? 'lista-concluida' : ''}" onclick="openList('${list.id}', event)">
-          <div class="card-lista-header">
-            <div>
-              <div style="display: flex; align-items: center; gap: 0.35rem; margin-bottom: 0.2rem; flex-wrap: wrap;">
-                ${badgeShared}
-                ${badgeConcluida}
-                ${badgeData}
-              </div>
-              <h3 class="card-lista-title" style="${isConcluida ? 'text-decoration: line-through; opacity: 0.85;' : ''}">${escapeHtml(list.name)}</h3>
-              <span class="budget-tag" style="margin-top: 0.25rem;">${icon} ${escapeHtml(list.category)}</span>
+    return `
+      <article class="list-card group relative ${isConcluida ? 'bg-surface-container-low/70 opacity-90' : 'bg-surface-container-lowest'} rounded-xl p-3.5 shadow-sm hover:shadow-md transition-all duration-200 border border-outline-variant/30 flex flex-col gap-3" data-status="${isConcluida ? 'completed' : 'in_progress'}" data-title="${escapeHtml(list.name)}">
+        <!-- Cabeçalho -->
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="w-9 h-9 rounded-lg bg-surface-container-highest text-on-surface flex items-center justify-center shrink-0">
+              <span class="material-symbols-outlined text-[20px]">${iconName}</span>
             </div>
-            <button class="btn-trash" title="${isOwner ? 'Excluir Lista Permanentemente' : 'Sair da Lista Compartilhada'}" onclick="handleDeleteList('${list.id}', event)">
-              🗑️
-            </button>
+            <div class="flex flex-col min-w-0">
+              <h2 class="font-label-lg text-label-lg text-on-surface truncate font-bold leading-snug ${isConcluida ? 'line-through decoration-outline-variant' : ''}">${escapeHtml(list.name)}</h2>
+              <div class="flex items-center gap-1.5 text-on-surface-variant text-[11px] leading-tight mt-0.5">
+                <span class="material-symbols-outlined text-[13px] text-primary">calendar_month</span>
+                <span class="">${listDateFormatted}</span>
+              </div>
+            </div>
           </div>
-
-          <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-top: 0.5rem;">
-            <span>Orçamento: <strong>${formatCurrency(orcamento)}</strong></span>
-            <span>Gasto: <strong style="color: var(--primary);">${formatCurrency(totalGasto)}</strong></span>
+          ${badgeStatus}
+        </div>
+        <!-- Barra de Progresso com respiro -->
+        <div class="flex flex-col gap-1.5">
+          <div class="flex justify-between items-center text-[11px]">
+            <span class="text-on-surface-variant font-normal">Itens comprados</span>
+            <span class="font-bold text-on-surface">${itensMarcados} de ${qtdItens} <span class="${saldoColor} font-semibold">(${Math.round(itemProgress)}%)</span></span>
           </div>
-
-          <div class="progress-container" style="margin: 0.5rem 0;">
-            <div class="progress-fill ${progClass}" style="width: ${progressWidth}%;"></div>
-          </div>
-
-          <div class="card-lista-footer">
-            <span>${qtdItens} ${qtdItens === 1 ? 'item' : 'itens'} (${Math.round(percentualConsumido)}%)</span>
-            <span style="font-weight: 700; color: ${saldoColor}">
-              Saldo: ${formatCurrency(saldoDisponivel)} (${saldoStatus})
-            </span>
-          </div>
-
-          <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
-            <button class="btn btn-primary btn-sm" style="flex: 2; min-height: 40px; font-size: 0.88rem;" onclick="openList('${list.id}', event)">
-              Abrir Itens →
-            </button>
-            ${isConcluida ? `
-              <button class="btn btn-outline btn-sm" style="flex: 1; min-height: 40px; font-size: 0.82rem; border-color: #10b981; color: #10b981; white-space: nowrap;" onclick="window.openConcluirCompraModalById('${list.id}', event)" title="Ver fechamento da lista">
-                ✅ Concluída
-              </button>
-            ` : `
-              <button class="btn btn-finish-sm btn-sm" style="flex: 1; min-height: 40px; font-size: 0.82rem; white-space: nowrap;" onclick="window.openConcluirCompraModalById('${list.id}', event)" title="Concluir lista, lançar no histórico e deduzir do saldo">
-                🏁 Concluir
-              </button>
-            `}
+          <div class="w-full h-1.5 bg-surface-container-highest rounded-full overflow-hidden">
+            <div class="h-full ${progClass} rounded-full" style="width: ${itemProgress}%;"></div>
           </div>
         </div>
-      `;
-    }).join('');
+        <!-- Rodapé -->
+        <div class="pt-2.5 flex items-center justify-between border-t border-surface-container/60">
+          <div class="flex items-center gap-2">
+            <div class="flex flex-col">
+              <span class="text-[10px] text-on-surface-variant uppercase font-semibold leading-none">Total Gasto</span>
+              <span class="text-sm ${saldoColor} font-extrabold leading-tight mt-0.5">${formatCurrency(totalGasto)}</span>
+            </div>
+          </div>
+          
+          <div class="flex gap-2">
+            ${!isConcluida ? `
+            <button aria-label="Finalizar Lista" class="h-8 px-3 rounded-lg bg-surface-container text-on-surface font-label-sm text-[12px] font-semibold flex items-center gap-1 hover:bg-surface-container-highest active:scale-95 transition-all shadow-sm" onclick="window.openConcluirCompraModalById('${list.id}', event)">
+              <span class="material-symbols-outlined text-[16px]">done_all</span>
+            </button>
+            ` : ''}
+            <button aria-label="Abrir lista" class="h-8 px-3.5 rounded-lg bg-primary text-on-primary font-label-sm text-[12px] font-semibold flex items-center gap-1 hover:bg-primary-container active:scale-95 transition-all shadow-sm" onclick="openList('${list.id}', event)">
+              ${isConcluida ? 'Ver Lista' : 'Abrir'}
+              <span class="material-symbols-outlined text-[16px]">${isConcluida ? 'visibility' : 'chevron_right'}</span>
+            </button>
+          </div>
+        </div>
+      </article>
+    `;
+  }).join('');
+  
+  if (typeof applyFilterAndSearch === 'function') {
+    applyFilterAndSearch();
+  }
 }
 
 // ==========================================================
@@ -331,26 +429,57 @@ function renderDashboard() {
 let listSyncInterval = null;
 
 function stopListAutoSync() {
-  if (listSyncInterval) {
-    clearInterval(listSyncInterval);
-    listSyncInterval = null;
+  if (window.listSyncInterval) {
+    clearInterval(window.listSyncInterval);
+    window.listSyncInterval = null;
+  }
+  if (window.listRealtimeSubscription) {
+    window.listRealtimeSubscription.unsubscribe();
+    window.listRealtimeSubscription = null;
   }
 }
 
 function startListAutoSync(listId) {
   stopListAutoSync();
-  listSyncInterval = setInterval(async () => {
-    if (state.activeListId === String(listId) && !document.hidden) {
-      try {
-        const fresh = await db.getListById(listId);
-        if (fresh && state.activeListId === String(listId)) {
-          const idx = state.lists.findIndex(l => String(l.id) === String(listId));
-          if (idx !== -1) state.lists[idx] = fresh;
-          renderListDetailView(fresh);
+  
+  if (db.supabaseClient && db.isCloudOnline) {
+    window.listRealtimeSubscription = db.supabaseClient
+      .channel(`public:listas:id=eq.${listId}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'listas', filter: `id=eq.${listId}` }, payload => {
+        if (state.activeListId === String(listId) && !document.hidden) {
+          const fresh = payload.new;
+          if (fresh && fresh.items) {
+            // Check for new items to add badge
+            const currentList = state.lists.find(l => String(l.id) === String(listId));
+            if (currentList && currentList.items) {
+              const currentItemIds = currentList.items.map(i => i.id);
+              fresh.items.forEach(item => {
+                if (!currentItemIds.includes(item.id)) {
+                  item.isNew = true; setTimeout(() => { item.isNew = false; renderListDetailView(state.lists.find(l => String(l.id) === String(listId))); }, 5000);
+                }
+              });
+            }
+            const idx = state.lists.findIndex(l => String(l.id) === String(listId));
+            if (idx !== -1) state.lists[idx] = fresh;
+            renderListDetailView(fresh);
+          }
         }
-      } catch (_) {}
-    }
-  }, 4000);
+      })
+      .subscribe();
+  } else {
+    window.listSyncInterval = setInterval(async () => {
+      if (state.activeListId === String(listId) && !document.hidden) {
+        try {
+          const fresh = await db.getListById(listId);
+          if (fresh && state.activeListId === String(listId)) {
+            const idx = state.lists.findIndex(l => String(l.id) === String(listId));
+            if (idx !== -1) state.lists[idx] = fresh;
+            renderListDetailView(fresh);
+          }
+        } catch (_) {}
+      }
+    }, 4000);
+  }
 }
 
 async function renderListDetail(listId) {
@@ -500,11 +629,21 @@ function renderListDetailView(list) {
   // Renderizar produtos
   renderProductCards(list);
 
-  // Trocar telas
+  // Trocar telas (via hash)
   const viewDash = document.getElementById('view-dashboard');
   const viewDetail = document.getElementById('view-lista-detalhe');
   if (viewDash) viewDash.classList.add('hidden');
   if (viewDetail) viewDetail.classList.remove('hidden');
+
+  // Atualiza botão Reabrir
+  const btnReabrir = document.getElementById('btn-reabrir-lista');
+  if (btnReabrir) {
+    if (list.status === 'concluida') {
+      btnReabrir.classList.remove('hidden');
+    } else {
+      btnReabrir.classList.add('hidden');
+    }
+  }
 }
 
 function renderProductCards(list) {
@@ -551,21 +690,23 @@ function renderProductCards(list) {
     }
 
     return `
-      <div class="mobile-product-card ${item.checked ? 'item-comprado' : ''}">
+      <div class="mobile-product-card ${item.checked ? 'item-comprado' : ''}" id="card-item-${item.id}">
         <div class="product-left-col">
           <input 
             type="checkbox" 
             class="mobile-checkbox" 
             ${item.checked ? 'checked' : ''} 
             ${isReadOnly ? 'disabled' : ''}
-            onchange="handleToggleItem('${list.id}', '${item.id}', this.checked)"
-            title="${isReadOnly ? 'Somente leitura' : 'Marcar como comprado'}"
+            data-list-id="${list.id}"
+            data-item-id="${item.id}"
+            title="${isReadOnly ? 'Somente leitura' : (item.checked ? 'Desmarcar item' : 'Marcar como comprado')}"
           >
-          <div class="product-info-group">
-            <span class="product-name">${escapeHtml(item.name)}</span>
-            <div class="product-meta-sub">
+          <div class="product-info-group flex items-center flex-wrap" onclick="handleOpenEditItem('${list.id}', '${item.id}')" style="cursor:pointer;" title="${isReadOnly ? 'Somente leitura' : 'Toque para editar o produto'}">
+            <span class="product-name mr-1">${escapeHtml(item.name)}</span>
+            ${item.isNew ? '<span class="bg-primary text-on-primary text-[10px] px-1.5 py-0.5 rounded-sm font-bold ml-1 animate-pulse" id="badge-new-' + item.id + '">NOVO</span>' : ''}
+            <div class="product-meta-sub w-full mt-0.5">
               <span>${catIcon} ${escapeHtml(item.category)}</span>
-              <span>•</span>
+              <span> &bull; </span>
               <span class="product-qty-badge">${unitDisplay}</span>
             </div>
           </div>
@@ -582,14 +723,22 @@ function renderProductCards(list) {
             </button>
           `}
           ${!isReadOnly ? `
-            <button class="btn-trash" title="Excluir item" onclick="handleDeleteItem('${list.id}', '${item.id}')">
-              ✕
-            </button>
+            <button class="btn-edit-item" title="Editar produto" onclick="handleOpenEditItem('${list.id}', '${item.id}')">✏️</button>
+            <button class="btn-trash" title="Excluir item" onclick="handleDeleteItem('${list.id}', '${item.id}')">✕</button>
           ` : ''}
         </div>
       </div>
     `;
   }).join('');
+
+  // Delega evento de checkbox via container (evita problemas com innerHTML dinâmico)
+  container.querySelectorAll('.mobile-checkbox').forEach(cb => {
+    cb.addEventListener('change', function() {
+      const lid = this.dataset.listId;
+      const iid = this.dataset.itemId;
+      handleToggleItem(lid, iid, this.checked, this);
+    });
+  });
 }
 
 // ==========================================================
@@ -597,13 +746,13 @@ function renderProductCards(list) {
 // ==========================================================
 
 async function openList(listId, event) {
-  if (event) {
-    event.stopPropagation();
-  }
+  if (event) event.stopPropagation();
   state.filterCategory = 'TODAS';
   document.querySelectorAll('#chips-categorias .chip-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.cat === 'TODAS');
   });
+  // Atualiza hash da URL
+  window.history.pushState({}, '', `#/listas/${listId}`);
   await renderListDetail(listId);
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -611,6 +760,7 @@ async function openList(listId, event) {
 function showDashboard() {
   stopListAutoSync();
   state.activeListId = null;
+  window.history.pushState({}, '', '#/listas');
   const viewDash = document.getElementById('view-dashboard');
   const viewDetail = document.getElementById('view-lista-detalhe');
   if (viewDetail) viewDetail.classList.add('hidden');
@@ -673,97 +823,148 @@ function shareListWhatsApp() {
 }
 
 async function handleDeleteList(listId, event) {
-  if (event) {
-    event.stopPropagation();
-    event.preventDefault();
-  }
+  if (event) { event.stopPropagation(); event.preventDefault(); }
   const list = state.lists.find(l => String(l.id) === String(listId));
   const listName = list ? list.name : 'esta lista';
   const isOwner = list ? (!list.isShared && (list.userId === db.getUser()?.id || !list.userId)) : true;
 
   const confirmMsg = isOwner 
-    ? `🗑️ Deseja realmente excluir permanentemente a lista "${listName}" e todos os seus itens?`
-    : `🚪 Deseja sair e remover a lista compartilhada "${listName}" do seu aplicativo?`;
+    ? `Deseja realmente excluir permanentemente a lista "${listName}" e todos os seus itens?`
+    : `Deseja sair e remover a lista compartilhada "${listName}" do seu aplicativo?`;
 
-  if (confirm(confirmMsg)) {
-    vibrateDevice(35);
-    try {
-      await db.deleteList(listId);
-      state.lists = state.lists.filter(l => String(l.id) !== String(listId));
-      if (state.activeListId === String(listId)) {
-        stopListAutoSync();
-        showDashboard();
-      } else {
-        renderDashboard();
-      }
-    } catch (err) {
-      alert('Erro ao excluir lista: ' + (err.message || err));
+  const ok = await showConfirm(confirmMsg, isOwner ? '🗑️ Excluir Lista' : '🚶 Sair da Lista', isOwner ? '🗑️' : '🚶', isOwner ? '🗑️ Excluir' : '🚶 Sair', 'btn-danger-outline');
+  if (!ok) return;
+
+  vibrateDevice(35);
+  try {
+    await db.deleteList(listId);
+    state.lists = state.lists.filter(l => String(l.id) !== String(listId));
+    if (state.activeListId === String(listId)) {
+      stopListAutoSync();
+      showDashboard();
+    } else {
+      renderDashboard();
     }
+    showToast(isOwner ? `Lista "${listName}" excluída.` : `Você saiu da lista "${listName}".`, 'success');
+  } catch (err) {
+    showToast('Erro ao excluir lista: ' + (err.message || err), 'error');
   }
 }
 
-async function handleToggleItem(listId, itemId, checked) {
+async function handleToggleItem(listId, itemId, checked, checkboxEl) {
   vibrateDevice(15);
-  const list = state.lists.find(l => l.id === listId);
+
+  // Optimistic update: atualiza imediatamente na UI local
+  const list = state.lists.find(l => String(l.id) === String(listId));
   if (list && list.items) {
-    const item = list.items.find(i => i.id === itemId);
-    // Se estiver marcando como comprado e ainda não tiver preço
-    if (item && checked && (Number(item.unitPrice) || 0) <= 0) {
-      const precoDigitado = prompt(`🛒 Qual o valor de "${item.name}" no mercado? (R$)\n\n(Digite o valor pago para calcular no total):`, '');
-      if (precoDigitado !== null && precoDigitado.trim() !== '') {
-        const parsed = parseFloat(precoDigitado.replace(',', '.')) || 0;
-        if (parsed > 0) {
-          item.unitPrice = parsed;
-          item.checked = true;
-          await db.updateItem(listId, itemId, { unitPrice: parsed, checked: true });
-          const updatedList = await db.getListById(listId);
-          if (updatedList) {
-            const idx = state.lists.findIndex(l => l.id === listId);
-            if (idx !== -1) state.lists[idx] = updatedList;
-            renderListDetail(listId);
-            return;
-          }
-        }
+    const item = list.items.find(i => String(i.id) === String(itemId));
+    if (item) {
+      item.checked = checked;
+      // Atualiza card financeiro imediatamente (saldo/gasto do orçamento)
+      updateBudgetMetricsOnly(list);
+      // Anima o card do item
+      const card = document.getElementById(`card-item-${itemId}`);
+      if (card) {
+        if (checked) card.classList.add('item-comprado');
+        else card.classList.remove('item-comprado');
       }
     }
   }
 
-  const updatedList = await db.toggleItem(listId, itemId, checked);
-  if (updatedList) {
-    const idx = state.lists.findIndex(l => l.id === listId);
-    if (idx !== -1) state.lists[idx] = updatedList;
-    renderListDetail(listId);
+  // Se marcando e sem preço, abre bottom sheet de edição focado no preço
+  if (checked && list && list.items) {
+    const item = list.items.find(i => String(i.id) === String(itemId));
+    if (item && (Number(item.unitPrice) || 0) <= 0) {
+      handleOpenEditItem(listId, itemId, true);
+      return;
+    }
+  }
+
+  // Persiste no banco
+  try {
+    const updatedList = await db.toggleItem(listId, itemId, checked);
+    if (updatedList) {
+      const idx = state.lists.findIndex(l => String(l.id) === String(listId));
+      if (idx !== -1) state.lists[idx] = updatedList;
+      updateBudgetMetricsOnly(updatedList);
+    }
+  } catch (err) {
+    // Reverte se falhou
+    if (list && list.items) {
+      const item = list.items.find(i => String(i.id) === String(itemId));
+      if (item) item.checked = !checked;
+      updateBudgetMetricsOnly(list);
+      const card = document.getElementById(`card-item-${itemId}`);
+      if (card) {
+        if (!checked) card.classList.add('item-comprado');
+        else card.classList.remove('item-comprado');
+      }
+    }
+    if (checkboxEl) checkboxEl.checked = !checked;
+    showToast('Erro ao salvar. Verifique sua conexão.', 'error');
+  }
+}
+
+// Atualiza apenas os cards financeiros sem re-renderizar toda a lista de itens
+function updateBudgetMetricsOnly(list) {
+  if (!list) return;
+  const { orcamento, totalGasto, saldoDisponivel, percentualConsumido } = calculateListTotals(list);
+  const elOrc = document.getElementById('metric-orcamento');
+  const elGasto = document.getElementById('metric-gasto');
+  const elSaldo = document.getElementById('metric-saldo');
+  const elPct = document.getElementById('progress-percent-text');
+  const progressFill = document.getElementById('budget-progress-fill');
+  const boxSaldo = document.getElementById('box-saldo-disponivel');
+  const statusSaldo = document.getElementById('metric-saldo-status');
+  const progressMsg = document.getElementById('progress-status-msg');
+
+  if (elOrc) elOrc.textContent = formatCurrency(orcamento);
+  if (elGasto) elGasto.textContent = formatCurrency(totalGasto);
+  if (elSaldo) elSaldo.textContent = formatCurrency(saldoDisponivel);
+  if (elPct) elPct.textContent = `${Math.round(percentualConsumido)}%`;
+  if (progressFill) {
+    progressFill.style.width = `${Math.min(100, Math.max(0, percentualConsumido))}%`;
+    progressFill.classList.remove('prog-green', 'prog-yellow', 'prog-red');
+    if (saldoDisponivel < 0) progressFill.classList.add('prog-red');
+    else if (percentualConsumido >= 75) progressFill.classList.add('prog-yellow');
+    else progressFill.classList.add('prog-green');
+  }
+  if (boxSaldo) {
+    boxSaldo.classList.remove('saldo-positivo', 'saldo-alerta', 'saldo-negativo');
+    if (saldoDisponivel < 0) {
+      boxSaldo.classList.add('saldo-negativo');
+      if (statusSaldo) statusSaldo.textContent = `Excedido em ${formatCurrency(Math.abs(saldoDisponivel))}`;
+      if (progressMsg) { progressMsg.textContent = 'Orçamento Estourado!'; progressMsg.style.color = 'var(--danger)'; }
+    } else if (percentualConsumido >= 75) {
+      boxSaldo.classList.add('saldo-alerta');
+      if (statusSaldo) statusSaldo.textContent = `Restam apenas ${formatCurrency(saldoDisponivel)}`;
+      if (progressMsg) { progressMsg.textContent = 'Atenção ao Limite'; progressMsg.style.color = 'var(--warning-text)'; }
+    } else {
+      boxSaldo.classList.add('saldo-positivo');
+      if (statusSaldo) statusSaldo.textContent = `Restante livre: ${formatCurrency(saldoDisponivel)}`;
+      if (progressMsg) { progressMsg.textContent = 'Seguro'; progressMsg.style.color = 'var(--success)'; }
+    }
   }
 }
 
 async function handleEditItemPrice(listId, itemId) {
-  const list = state.lists.find(l => l.id === listId);
-  if (!list || !list.items) return;
-  const item = list.items.find(i => i.id === itemId);
-  if (!item) return;
-
-  const currentVal = (Number(item.unitPrice) || 0) > 0 ? String(item.unitPrice).replace('.', ',') : '';
-  const novoValor = prompt(`🏷️ Preço de "${item.name}" no mercado (R$):`, currentVal);
-  if (novoValor === null) return;
-
-  const parsed = parseFloat(novoValor.replace(',', '.')) || 0;
-  vibrateDevice(20);
-  await db.updateItem(listId, itemId, { unitPrice: parsed });
-  const updatedList = await db.getListById(listId);
-  if (updatedList) {
-    const idx = state.lists.findIndex(l => l.id === listId);
-    if (idx !== -1) state.lists[idx] = updatedList;
-    renderListDetail(listId);
-  }
+  // Abre sheet de edição com foco no campo de preço
+  handleOpenEditItem(listId, itemId, false, true);
 }
 
 async function handleDeleteItem(listId, itemId) {
   vibrateDevice(25);
+  const list = state.lists.find(l => String(l.id) === String(listId));
+  const item = list?.items?.find(i => String(i.id) === String(itemId));
+  const ok = await showConfirm(`Excluir "${item?.name || 'este item'}" da lista?`, 'Excluir Item', '🗑️', '🗑️ Excluir', 'btn-danger-outline');
+  if (!ok) return;
   const updatedList = await db.deleteItem(listId, itemId);
   if (updatedList) {
-    const idx = state.lists.findIndex(l => l.id === listId);
+    const idx = state.lists.findIndex(l => String(l.id) === String(listId));
     if (idx !== -1) state.lists[idx] = updatedList;
-    renderListDetail(listId);
+    renderProductCards(updatedList);
+    updateBudgetMetricsOnly(updatedList);
+    showToast('Item excluído.', 'success', 2000);
   }
 }
 
@@ -813,7 +1014,7 @@ async function handleCreateList(e) {
   const dataInput = document.getElementById('nova-lista-data')?.value || new Date().toISOString().split('T')[0];
 
   if (!nome) {
-    alert('Informe o nome da lista.');
+    showToast('Informe o nome da lista.', 'warning');
     return;
   }
 
@@ -829,14 +1030,20 @@ async function handleCreateList(e) {
   };
 
   vibrateDevice(25);
-  await db.saveList(newList);
+
+  // Optimistic: adiciona localmente primeiro
   state.lists.unshift(newList);
-  
   closeSheet('sheet-nova-lista');
   document.getElementById('form-nova-lista').reset();
-  
-  // Abre a lista criada
   openList(newList.id);
+
+  // Persiste no banco em background
+  try {
+    await db.saveList(newList);
+    showToast(`Lista "${nome}" criada!`, 'success');
+  } catch (err) {
+    showToast('Erro ao salvar lista na nuvem: ' + (err.message || err), 'error');
+  }
 }
 
 function setProductUnit(unit) {
@@ -946,7 +1153,7 @@ async function handleAddProduct(e) {
   const unitPrice = parseFloat(precoInput.value) || 0;
 
   if (!name) {
-    alert('Informe o nome do produto.');
+    showToast('Informe o nome do produto.', 'warning');
     nomeInput.focus();
     return;
   }
@@ -962,21 +1169,48 @@ async function handleAddProduct(e) {
   };
 
   vibrateDevice(20);
-  const updatedList = await db.addItem(state.activeListId, newItem);
-  if (updatedList) {
-    const idx = state.lists.findIndex(l => l.id === state.activeListId);
-    if (idx !== -1) state.lists[idx] = updatedList;
+
+  // 1. OPTIMISTIC UPDATE: adiciona imediatamente na memória e re-renderiza
+  const listIdx = state.lists.findIndex(l => String(l.id) === String(state.activeListId));
+  if (listIdx !== -1) {
+    if (!state.lists[listIdx].items) state.lists[listIdx].items = [];
+    state.lists[listIdx].items.push(newItem);
+    renderProductCards(state.lists[listIdx]);
+    updateBudgetMetricsOnly(state.lists[listIdx]);
+    // Anima o novo item
+    setTimeout(() => {
+      const card = document.getElementById(`card-item-${newItem.id}`);
+      if (card) card.classList.add('item-novo');
+    }, 50);
   }
 
-  // Limpa formulário e fecha Bottom Sheet
+  // Limpa formulário e fecha Bottom Sheet imediatamente
   document.getElementById('form-novo-produto').reset();
   setProductUnit('un');
   document.getElementById('produto-quantidade').value = '1';
   updateSubtotalPreview();
   closeSheet('sheet-novo-produto');
+  showToast(`"${name}" adicionado à lista!`, 'success', 2500);
 
-  // Recalcula e atualiza tela instantaneamente
-  renderListDetail(state.activeListId);
+  // 2. Persiste no banco em background
+  try {
+    const updatedList = await db.addItem(state.activeListId, newItem);
+    if (updatedList) {
+      const idx = state.lists.findIndex(l => String(l.id) === String(state.activeListId));
+      if (idx !== -1) state.lists[idx] = updatedList;
+      renderProductCards(updatedList);
+      updateBudgetMetricsOnly(updatedList);
+    }
+  } catch (err) {
+    showToast('Erro ao salvar produto na nuvem: ' + (err.message || err), 'error', 5000);
+    // Reverte o otimismo se falhou
+    const idx = state.lists.findIndex(l => String(l.id) === String(state.activeListId));
+    if (idx !== -1) {
+      state.lists[idx].items = state.lists[idx].items.filter(i => i.id !== newItem.id);
+      renderProductCards(state.lists[idx]);
+      updateBudgetMetricsOnly(state.lists[idx]);
+    }
+  }
 }
 
 async function handleUpdateBudget(e) {
@@ -995,6 +1229,7 @@ async function handleUpdateBudget(e) {
 
   closeSheet('modal-editar-orcamento');
   renderListDetail(state.activeListId);
+  showToast('Orçamento atualizado!', 'success', 2000);
 }
 
 // ==========================================================
@@ -1037,7 +1272,7 @@ async function handleSaveSupabaseConfig(e) {
 
   await loadSupabaseConfig();
   await loadDataFromDb();
-  alert('Configurações salvas e conexão testada!');
+  showToast('Configurações salvas e conexão testada!', 'success');
 }
 
 // ==========================================================
@@ -1151,6 +1386,9 @@ function setupEventListeners() {
   const tabCarteira = document.getElementById('tab-nav-carteira');
   if (tabCarteira) tabCarteira.addEventListener('click', () => switchAppTab('carteira'));
 
+  const tabRanking = document.getElementById('tab-nav-ranking');
+  if (tabRanking) tabRanking.addEventListener('click', () => switchAppTab('ranking'));
+
   const tabHistorico = document.getElementById('tab-nav-historico');
   if (tabHistorico) tabHistorico.addEventListener('click', () => switchAppTab('historico'));
 
@@ -1223,7 +1461,7 @@ function setupEventListeners() {
       if (activeSharingList && activeSharingList.inviteCode) {
         navigator.clipboard.writeText(activeSharingList.inviteCode).then(() => {
           vibrateDevice(20);
-          alert(`Código copiado: ${activeSharingList.inviteCode}`);
+          showToast(`Código copiado: ${activeSharingList.inviteCode}`, 'success');
         }).catch(() => {
           prompt('Copie o código abaixo:', activeSharingList.inviteCode);
         });
@@ -1496,7 +1734,7 @@ function setupEventListeners() {
   // Botão Configurações Banco de Dados (Exclusivo para Administrador)
   const handleOpenDbConfig = () => {
     if (!db.isAdmin()) {
-      alert('Acesso restrito ao administrador do sistema.');
+      showToast('Acesso restrito ao administrador do sistema.', 'error');
       return;
     }
     loadSupabaseConfig();
@@ -1829,14 +2067,15 @@ async function handleAuthRecovery(e) {
 }
 
 async function handleLogout() {
-  if (confirm('Deseja realmente sair da sua conta?')) {
-    vibrateDevice(20);
-    await db.signOut();
-    closeAllSheets();
-    state.lists = [];
-    state.activeListId = null;
-    await loadDataFromDb();
-  }
+  const ok = await showConfirm('Deseja realmente sair da sua conta?', 'Sair da Conta', '🚪', '🚪 Sair', 'btn-danger-outline');
+  if (!ok) return;
+  vibrateDevice(20);
+  await db.signOut();
+  closeAllSheets();
+  state.lists = [];
+  state.activeListId = null;
+  window.history.pushState({}, '', '#/listas');
+  await loadDataFromDb();
 }
 
 async function handleSyncNow() {
@@ -1848,9 +2087,9 @@ async function handleSyncNow() {
     await db.migrateLocalListsToCloud();
     await loadDataFromDb();
     vibrateDevice(25);
-    alert('Listas sincronizadas com a nuvem com sucesso!');
+    showToast('Listas sincronizadas com a nuvem com sucesso!', 'success');
   } catch (err) {
-    alert('Erro ao sincronizar: ' + err.message);
+    showToast('Erro ao sincronizar: ' + err.message, 'error');
   } finally {
     btn.disabled = false;
     btn.textContent = '🔄 Sincronizar Listas Agora';
@@ -1890,7 +2129,7 @@ async function loadAdminData() {
     renderAdminLeads(adminLeadsCache);
   } catch (err) {
     if (loading) loading.classList.add('hidden');
-    alert('Erro ao carregar dados do painel admin: ' + err.message);
+    showToast('Erro ao carregar dados do painel admin: ' + err.message, 'error');
   }
 }
 
@@ -1926,7 +2165,7 @@ function renderAdminLeads(leads) {
         if (cleanDigits.length === 10 || cleanDigits.length === 11) {
           cleanDigits = '55' + cleanDigits;
         }
-        const textMsg = encodeURIComponent(`Olá ${name}, tudo bem? Sou da equipe do Lista de Compras Plus!`);
+        const textMsg = encodeURIComponent(`Olá ${name}, tudo bem? Sou da equipe do Compras Plus!`);
         waButton = `
           <a href="https://wa.me/${cleanDigits}?text=${textMsg}" target="_blank" rel="noopener" class="btn-lead-whatsapp">
             <span>💬</span> Conversar no WhatsApp
@@ -1986,7 +2225,7 @@ function filterAdminLeads(searchTerm) {
 
 function exportLeadsToCsv() {
   if (!adminLeadsCache || adminLeadsCache.length === 0) {
-    alert('Nenhum lead disponível para exportação no momento.');
+    showToast('Nenhum lead disponível para exportação no momento.', 'warning');
     return;
   }
 
@@ -2035,6 +2274,7 @@ function exportLeadsToCsv() {
 function switchAppTab(tabName) {
   vibrateDevice(15);
   const tabListas = document.getElementById('tab-nav-listas');
+  const tabRanking = document.getElementById('tab-nav-ranking');
   const tabCarteira = document.getElementById('tab-nav-carteira');
   const tabHist = document.getElementById('tab-nav-historico');
   const tabPerfil = document.getElementById('tab-nav-perfil');
@@ -2042,37 +2282,47 @@ function switchAppTab(tabName) {
 
   const viewDashboard = document.getElementById('view-dashboard');
   const viewDetalhe = document.getElementById('view-lista-detalhe');
+  const viewRanking = document.getElementById('view-ranking');
   const viewCarteira = document.getElementById('view-carteira');
   const viewHistorico = document.getElementById('view-historico');
   const viewPerfil = document.getElementById('view-perfil');
   const viewAdmin = document.getElementById('view-admin');
+  const viewTermos = document.getElementById('view-termos');
   const fab = document.getElementById('fab-action-btn');
 
-  // Reseta abas ativas
-  [tabListas, tabCarteira, tabHist, tabPerfil, tabAdmin].forEach(t => t && t.classList.remove('active'));
-  // Oculta todas as telas
-  [viewDashboard, viewDetalhe, viewCarteira, viewHistorico, viewPerfil, viewAdmin].forEach(v => v && v.classList.add('hidden'));
+  [tabListas, tabRanking, tabCarteira, tabHist, tabPerfil, tabAdmin].forEach(t => t && t.classList.remove('active'));
+  [viewDashboard, viewDetalhe, viewRanking, viewCarteira, viewHistorico, viewPerfil, viewAdmin, viewTermos].forEach(v => v && v.classList.add('hidden'));
+
 
   if (tabName === 'listas') {
     if (tabListas) tabListas.classList.add('active');
     if (state.activeListId) {
       if (viewDetalhe) viewDetalhe.classList.remove('hidden');
+      window.history.pushState({}, '', `#/listas/${state.activeListId}`);
     } else {
       if (viewDashboard) viewDashboard.classList.remove('hidden');
+      window.history.pushState({}, '', '#/listas');
     }
     if (fab) fab.classList.remove('hidden');
     if (window.admobManager && typeof window.admobManager.renderWebBanner === 'function') {
       window.admobManager.renderWebBanner();
     }
+  } else if (tabName === 'ranking') {
+    if (tabRanking) tabRanking.classList.add('active');
+    if (viewRanking) viewRanking.classList.remove('hidden');
+    if (fab) fab.classList.add('hidden');
+    window.history.pushState({}, '', '#/ranking');
   } else if (tabName === 'carteira') {
     if (tabCarteira) tabCarteira.classList.add('active');
     if (viewCarteira) viewCarteira.classList.remove('hidden');
     if (fab) fab.classList.add('hidden');
+    window.history.pushState({}, '', '#/carteira');
     loadAndRenderWallet();
   } else if (tabName === 'historico') {
     if (tabHist) tabHist.classList.add('active');
     if (viewHistorico) viewHistorico.classList.remove('hidden');
     if (fab) fab.classList.add('hidden');
+    window.history.pushState({}, '', '#/historico');
     loadAndRenderHistory();
     if (window.admobManager && typeof window.admobManager.renderNativeAd === 'function') {
       window.admobManager.renderNativeAd('admob-native-slot');
@@ -2081,6 +2331,7 @@ function switchAppTab(tabName) {
     if (tabPerfil) tabPerfil.classList.add('active');
     if (viewPerfil) viewPerfil.classList.remove('hidden');
     if (fab) fab.classList.add('hidden');
+    window.history.pushState({}, '', '#/perfil');
     loadUserProfileView();
   } else if (tabName === 'admin') {
     if (tabAdmin) tabAdmin.classList.add('active');
@@ -2229,7 +2480,7 @@ async function handleSaveWalletEntry(e) {
   const btn = document.getElementById('btn-salvar-entrada-submit');
 
   if (!desc || valor <= 0) {
-    alert('Informe uma descrição e um valor válido.');
+    showToast('Informe uma descrição e um valor válido.', 'warning');
     return;
   }
 
@@ -2250,7 +2501,7 @@ async function handleSaveWalletEntry(e) {
     document.getElementById('form-nova-entrada').reset();
     loadAndRenderWallet();
   } catch (err) {
-    alert('Erro ao gravar entrada: ' + err.message);
+    showToast('Erro ao gravar entrada: ' + err.message, 'error');
   } finally {
     btn.disabled = false;
     btn.textContent = '💾 Gravar na Carteira';
@@ -2264,7 +2515,7 @@ window.handleDeleteWalletEntry = async function(id) {
       await db.deleteWalletEntry(id);
       loadAndRenderWallet();
     } catch (err) {
-      alert('Erro ao excluir: ' + err.message);
+      showToast('Erro ao excluir: ' + err.message, 'error');
     }
   }
 };
@@ -2284,21 +2535,21 @@ function loadUserProfileView() {
   const elName = document.getElementById('perfil-view-name');
   const elEmail = document.getElementById('perfil-view-email');
   const elAvatar = document.getElementById('perfil-avatar-circle');
-  const inputName = document.getElementById('perfil-input-name');
-  const inputPhone = document.getElementById('perfil-input-phone');
   const btnAdminLink = document.getElementById('btn-perfil-admin-link');
+  const statListas = document.getElementById('perfil-stat-listas');
 
   if (elName) elName.textContent = rawName;
   if (elEmail) elEmail.textContent = user.email;
   if (elAvatar) elAvatar.textContent = db.isAdmin() ? '🛡️' : initial;
-  if (inputName) inputName.value = rawName;
-  if (inputPhone) inputPhone.value = phone;
+  if (statListas) statListas.textContent = state.lists.length;
 
   if (btnAdminLink) {
     if (db.isAdmin()) {
       btnAdminLink.classList.remove('hidden');
+      btnAdminLink.style.display = 'flex';
     } else {
       btnAdminLink.classList.add('hidden');
+      btnAdminLink.style.display = 'none';
     }
   }
 }
@@ -2315,11 +2566,11 @@ async function handleSaveProfile(e) {
   try {
     await db.updateUserProfile({ name, phone });
     vibrateDevice(25);
-    alert('Perfil atualizado com sucesso!');
+    showToast('Perfil atualizado com sucesso!', 'success');
     loadUserProfileView();
     updateAuthUI();
   } catch (err) {
-    alert('Erro ao atualizar perfil: ' + err.message);
+    showToast('Erro ao atualizar perfil: ' + err.message, 'error');
   } finally {
     btn.disabled = false;
     btn.textContent = '💾 Salvar Alterações';
@@ -2441,7 +2692,7 @@ async function openCompartilharModal() {
   if (!list) return;
 
   if (!db.isAuthenticated()) {
-    alert('⚠️ Para compartilhar uma lista com amigos ou familiares, você precisa estar conectado à sua conta.');
+    showToast('💡 Para compartilhar uma lista com amigos ou familiares, você precisa estar conectado à sua conta.', 'info', 5000);
     openAuthModal('login');
     return;
   }
@@ -2560,7 +2811,7 @@ async function handleShareEmail(e) {
   e.preventDefault();
   const targetId = activeSharingList?.id || activeSharingList?.list_id || state.activeListId;
   if (!targetId) {
-    alert('Erro: Nenhuma lista selecionada para compartilhar.');
+    showToast('Nenhuma lista selecionada para compartilhar.', 'error');
     return;
   }
   const emailInput = document.getElementById('share-input-email');
@@ -2574,11 +2825,11 @@ async function handleShareEmail(e) {
   try {
     await db.shareListWithEmail(targetId, email, perm);
     vibrateDevice(25);
-    alert(`Lista compartilhada com sucesso com ${email} no ${perm === 'aberto' ? 'Modo Aberto (Editar)' : 'Modo Fechado (Apenas Ver)'}!`);
+    showToast(`Lista compartilhada com ${email}!`, 'success');
     emailInput.value = '';
     renderCollaboratorsList(targetId);
   } catch (err) {
-    alert('Erro ao compartilhar lista: ' + (err.message || err));
+    showToast('Erro ao compartilhar: ' + (err.message || err), 'error');
   } finally {
     btn.disabled = false;
     btn.textContent = 'Enviar';
@@ -2592,7 +2843,7 @@ function showConviteAlert(msg, type = 'error') {
     alertBox.textContent = msg;
     alertBox.classList.remove('hidden');
   } else {
-    alert(msg);
+    showToast(msg, type);
   }
 }
 
@@ -2621,7 +2872,6 @@ async function handleJoinListByCode(e) {
     closeSheet('sheet-entrar-lista-codigo');
     if (input) input.value = '';
 
-    // Atualiza a lista na memória e na UI
     state.lists = await db.getLists();
     if (!state.lists.some(l => l.id === result.list.id)) {
       state.lists.unshift(result.list);
@@ -2629,6 +2879,7 @@ async function handleJoinListByCode(e) {
 
     renderDashboard();
     switchAppTab('listas');
+    showToast(`Conectado à lista "${result.list.name}"!`, 'success');
     openList(result.list.id);
   } catch (err) {
     console.error('Erro ao conectar via convite:', err);
@@ -2914,11 +3165,9 @@ async function handleConfirmarFinalizarCompra() {
       purchasedAt: purchaseDate.toISOString()
     };
 
-    // 1. Grava no Histórico Oficial de Compras (isso registra a saída financeira)
     await db.savePurchaseHistory(historyItem);
     vibrateDevice(30);
 
-    // 2. Marca a Lista como Concluída
     list.status = 'concluida';
     list.concluidaAt = new Date().toISOString();
     list.totalGastoFinal = totalGasto;
@@ -2928,7 +3177,6 @@ async function handleConfirmarFinalizarCompra() {
     }
     await db.saveList(list);
 
-    // 3. Atualiza imediatamente a Carteira (deduzindo a saída do saldo) e o Histórico
     await loadAndRenderWallet();
     await loadAndRenderHistory();
     renderDashboard();
@@ -2938,18 +3186,15 @@ async function handleConfirmarFinalizarCompra() {
     }
 
     closeSheet('sheet-concluir-compra');
-    alert(`🎉 Compra concluída com sucesso!\n\nTotal Gasto: ${formatCurrency(totalGasto)}\nData: ${formatDateBR(listDateStr)}\n\nO valor foi gravado no Histórico e deduzido do Saldo da Carteira!`);
+    showToast(`🎉 Compra concluída! Total: ${formatCurrency(totalGasto)}`, 'success', 5000);
 
-    // Exibe anúncio Intersticial AdMob ao concluir a compra
     if (window.admobManager && typeof window.admobManager.showInterstitial === 'function') {
-      window.admobManager.showInterstitial(() => {
-        switchAppTab('historico');
-      });
+      window.admobManager.showInterstitial(() => switchAppTab('historico'));
     } else {
       switchAppTab('historico');
     }
   } catch (err) {
-    alert('Erro ao gravar compra no histórico: ' + err.message);
+    showToast('Erro ao gravar compra: ' + err.message, 'error');
   } finally {
     btn.disabled = false;
     btn.textContent = '💾 Gravar no Histórico & Deduzir do Saldo';
@@ -3194,28 +3439,385 @@ window.shareHistoryReceipt = function(id) {
   } else {
     msg += `🔴 *Estouro:* ${formatCurrency(Math.abs(p.savings))}\n`;
   }
-  msg += `\nGerado via Lista de Compras Plus 📱`;
+  msg += `\nGerado via Compras Plus 📱`;
 
   window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
 };
 
 window.handleDeleteHistoryItem = async function(id) {
-  if (confirm('Deseja realmente excluir este registro de compra do seu histórico financeiro?')) {
-    vibrateDevice(20);
-    try {
-      await db.deletePurchaseHistory(id);
-      historyCache = historyCache.filter(h => h.id !== id);
-      applyHistoryFilters();
-    } catch (err) {
-      alert('Erro ao excluir registro: ' + err.message);
-    }
+  const ok = await showConfirm('Deseja realmente excluir este registro de compra do histórico financeiro?', 'Excluir Registro', '🗑️', '🗑️ Excluir', 'btn-danger-outline');
+  if (!ok) return;
+  vibrateDevice(20);
+  try {
+    await db.deletePurchaseHistory(id);
+    historyCache = historyCache.filter(h => h.id !== id);
+    applyHistoryFilters();
+    showToast('Registro excluído.', 'success', 2000);
+  } catch (err) {
+    showToast('Erro ao excluir registro: ' + err.message, 'error');
   }
 };
+
+window.handleDeleteWalletEntry = async function(id) {
+  const ok = await showConfirm('Deseja realmente excluir esta entrada financeira?', 'Excluir Entrada', '🗑️', '🗑️ Excluir', 'btn-danger-outline');
+  if (!ok) return;
+  vibrateDevice(20);
+  try {
+    await db.deleteWalletEntry(id);
+    loadAndRenderWallet();
+    showToast('Entrada excluída.', 'success', 2000);
+  } catch (err) {
+    showToast('Erro ao excluir: ' + err.message, 'error');
+  }
+};
+
+// ==========================================================
+// REABRIR LISTA CONCLUÍDA
+// ==========================================================
+async function handleReopenList() {
+  if (!state.activeListId) return;
+  const list = state.lists.find(l => String(l.id) === String(state.activeListId));
+  if (!list) return;
+
+  const ok = await showConfirm(`Reabrir a lista "${list.name}"? Ela voltará ao status Aberta.`, 'Reabrir Lista', '🔓', '🔓 Reabrir', 'btn-primary');
+  if (!ok) return;
+
+  list.status = 'aberta';
+  delete list.concluidaAt;
+  vibrateDevice(20);
+  try {
+    await db.saveList(list);
+    const idx = state.lists.findIndex(l => String(l.id) === String(state.activeListId));
+    if (idx !== -1) state.lists[idx] = list;
+    renderListDetailView(list);
+    renderDashboard();
+    showToast(`Lista "${list.name}" reaberta!`, 'success');
+  } catch (err) {
+    showToast('Erro ao reabrir lista: ' + err.message, 'error');
+  }
+}
+
+// ==========================================================
+// EDITAR PRODUTO COMPLETO (Nome, Categoria, Unidade, Qtd, Preço)
+// ==========================================================
+function handleOpenEditItem(listId, itemId, focusPreco = false, onlyPreco = false) {
+  const list = state.lists.find(l => String(l.id) === String(listId));
+  if (!list || !list.items) return;
+  const item = list.items.find(i => String(i.id) === String(itemId));
+  if (!item) return;
+
+  document.getElementById('edit-produto-list-id').value = listId;
+  document.getElementById('edit-produto-item-id').value = itemId;
+  document.getElementById('edit-produto-nome').value = item.name || '';
+  document.getElementById('edit-produto-preco').value = item.unitPrice > 0 ? item.unitPrice : '';
+  document.getElementById('edit-produto-quantidade').value = item.quantity || 1;
+
+  // Seleciona categoria
+  const catSel = document.getElementById('edit-produto-categoria');
+  if (catSel) catSel.value = item.category || 'Mercearia';
+
+  // Define unidade
+  setEditProductUnit(item.unit || 'un');
+
+  updateEditSubtotalPreview();
+  openSheet('sheet-editar-produto');
+
+  setTimeout(() => {
+    if (focusPreco || onlyPreco) {
+      document.getElementById('edit-produto-preco').focus();
+      document.getElementById('edit-produto-preco').select();
+    } else {
+      document.getElementById('edit-produto-nome').focus();
+    }
+  }, 200);
+}
+
+function setEditProductUnit(unit) {
+  const hiddenInput = document.getElementById('edit-produto-unidade');
+  if (hiddenInput) hiddenInput.value = unit;
+
+  document.querySelectorAll('#edit-produto-unidade-group .unit-toggle-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.unit === unit);
+  });
+
+  const labelQtd = document.getElementById('edit-label-produto-quantidade');
+  const labelPreco = document.getElementById('edit-label-produto-preco');
+  const qtdInput = document.getElementById('edit-produto-quantidade');
+
+  if (unit === 'kg') {
+    if (labelQtd) labelQtd.textContent = 'Peso (kg) *';
+    if (labelPreco) labelPreco.textContent = 'Preço do Kg (R$)';
+    if (qtdInput) { qtdInput.step = '0.1'; qtdInput.min = '0.1'; }
+  } else if (unit === 'g') {
+    if (labelQtd) labelQtd.textContent = 'Peso (Gramas) *';
+    if (labelPreco) labelPreco.textContent = 'Preço do Kg (R$)';
+    if (qtdInput) { qtdInput.step = '50'; qtdInput.min = '50'; }
+  } else if (unit === 'L') {
+    if (labelQtd) labelQtd.textContent = 'Volume (Litros) *';
+    if (labelPreco) labelPreco.textContent = 'Preço do Litro (R$)';
+    if (qtdInput) { qtdInput.step = '0.5'; qtdInput.min = '0.5'; }
+  } else {
+    if (labelQtd) labelQtd.textContent = 'Quantidade (un) *';
+    if (labelPreco) labelPreco.textContent = 'Preço Unit. (R$)';
+    if (qtdInput) { qtdInput.step = '1'; qtdInput.min = '1'; }
+  }
+  updateEditSubtotalPreview();
+}
+
+function updateEditSubtotalPreview() {
+  const qtd = parseFloat(document.getElementById('edit-produto-quantidade')?.value) || 0;
+  const preco = parseFloat(document.getElementById('edit-produto-preco')?.value) || 0;
+  const unit = document.getElementById('edit-produto-unidade')?.value || 'un';
+  let subtotal = 0;
+  if (unit === 'g') subtotal = (qtd / 1000) * preco;
+  else subtotal = qtd * preco;
+  const el = document.getElementById('edit-preview-subtotal');
+  if (el) el.textContent = formatCurrency(subtotal);
+}
+
+async function handleSaveEditItem(e) {
+  e.preventDefault();
+  const listId = document.getElementById('edit-produto-list-id').value;
+  const itemId = document.getElementById('edit-produto-item-id').value;
+  const nome = document.getElementById('edit-produto-nome').value.trim();
+  const cat = document.getElementById('edit-produto-categoria').value;
+  const unit = document.getElementById('edit-produto-unidade').value;
+  const quantity = parseFloat(document.getElementById('edit-produto-quantidade').value) || 1;
+  const unitPrice = parseFloat(document.getElementById('edit-produto-preco').value) || 0;
+
+  if (!nome) { showToast('Informe o nome do produto.', 'warning'); return; }
+
+  const updates = { name: nome, category: cat, unit, quantity, unitPrice };
+
+  // Optimistic update local
+  const list = state.lists.find(l => String(l.id) === String(listId));
+  if (list && list.items) {
+    const item = list.items.find(i => String(i.id) === String(itemId));
+    if (item) Object.assign(item, updates);
+    renderProductCards(list);
+    updateBudgetMetricsOnly(list);
+  }
+
+  closeSheet('sheet-editar-produto');
+  showToast(`"${nome}" atualizado!`, 'success', 2000);
+  vibrateDevice(20);
+
+  try {
+    const updatedList = await db.updateItem(listId, itemId, updates);
+    if (updatedList) {
+      const idx = state.lists.findIndex(l => String(l.id) === String(listId));
+      if (idx !== -1) state.lists[idx] = updatedList;
+      renderProductCards(updatedList);
+      updateBudgetMetricsOnly(updatedList);
+    }
+  } catch (err) {
+    showToast('Erro ao salvar alterações: ' + err.message, 'error');
+  }
+}
+
+// ==========================================================
+// REABRIR LISTA CONCLUÍDA
+// ==========================================================
+async function handleReopenList() {
+  if (!state.activeListId) return;
+  const list = state.lists.find(l => String(l.id) === String(state.activeListId));
+  if (!list) return;
+
+  const ok = await showConfirm(
+    `Reabrir a lista "${list.name}"? Ela voltará ao status Aberta e poderá ser editada novamente.`,
+    'Reabrir Lista', '🔓', '🔓 Reabrir', 'btn-primary'
+  );
+  if (!ok) return;
+
+  list.status = 'aberta';
+  delete list.concluidaAt;
+  vibrateDevice(20);
+
+  try {
+    await db.saveList(list);
+    const idx = state.lists.findIndex(l => String(l.id) === String(state.activeListId));
+    if (idx !== -1) state.lists[idx] = list;
+    // Atualiza o botão Reabrir / Concluir
+    const btnReabrir = document.getElementById('btn-reabrir-lista');
+    const btnConcluir = document.getElementById('btn-abrir-finalizar-compra');
+    if (btnReabrir) btnReabrir.classList.add('hidden');
+    if (btnConcluir) btnConcluir.classList.remove('hidden');
+    renderProductCards(list);
+    updateBudgetMetricsOnly(list);
+    renderDashboard();
+    showToast(`Lista "${list.name}" reaberta!`, 'success');
+  } catch (err) {
+    showToast('Erro ao reabrir lista: ' + err.message, 'error');
+    list.status = 'concluida'; // reverte
+  }
+}
+
+window.handleOpenEditItem = handleOpenEditItem;
+window.showToast = showToast;
+window.handleReopenList = handleReopenList;
 
 // Inicializar aplicação
 document.addEventListener('DOMContentLoaded', async () => {
   setupEventListeners();
+
+  // Listeners do sheet de editar produto
+  const btnFecharEditProduto = document.getElementById('btn-fechar-sheet-editar-produto');
+  if (btnFecharEditProduto) btnFecharEditProduto.addEventListener('click', () => closeSheet('sheet-editar-produto'));
+
+  const formEditarProduto = document.getElementById('form-editar-produto');
+  if (formEditarProduto) formEditarProduto.addEventListener('submit', handleSaveEditItem);
+
+  document.querySelectorAll('#edit-produto-unidade-group .unit-toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => setEditProductUnit(btn.dataset.unit));
+  });
+
+  const editQtdInput = document.getElementById('edit-produto-quantidade');
+  const editPrecoInput = document.getElementById('edit-produto-preco');
+  if (editQtdInput) editQtdInput.addEventListener('input', updateEditSubtotalPreview);
+  if (editPrecoInput) editPrecoInput.addEventListener('input', updateEditSubtotalPreview);
+
+  document.getElementById('edit-btn-qty-minus')?.addEventListener('click', () => {
+    const qtdEl = document.getElementById('edit-produto-quantidade');
+    const unit = document.getElementById('edit-produto-unidade')?.value || 'un';
+    let cur = parseFloat(qtdEl.value) || 1;
+    if (unit === 'un') qtdEl.value = Math.max(1, Math.round(cur) - 1);
+    else if (unit === 'g') qtdEl.value = Math.max(50, Math.round((cur - 50) / 50) * 50);
+    else if (unit === 'kg') qtdEl.value = Math.max(0.1, Math.round((cur - 0.25) * 100) / 100);
+    else if (unit === 'L') qtdEl.value = Math.max(0.5, Math.round((cur - 0.5) * 10) / 10);
+    updateEditSubtotalPreview();
+  });
+
+  document.getElementById('edit-btn-qty-plus')?.addEventListener('click', () => {
+    const qtdEl = document.getElementById('edit-produto-quantidade');
+    const unit = document.getElementById('edit-produto-unidade')?.value || 'un';
+    let cur = parseFloat(qtdEl.value) || 0;
+    if (unit === 'un') qtdEl.value = Math.max(1, Math.round(cur) + 1);
+    else if (unit === 'g') qtdEl.value = Math.round((cur + 50) / 50) * 50;
+    else if (unit === 'kg') qtdEl.value = Math.round((cur + 0.25) * 100) / 100;
+    else if (unit === 'L') qtdEl.value = Math.round((cur + 0.5) * 10) / 10;
+    updateEditSubtotalPreview();
+  });
+
+  // Listener do botão Reabrir Lista
+  const btnReabrir = document.getElementById('btn-reabrir-lista');
+  if (btnReabrir) btnReabrir.addEventListener('click', handleReopenList);
+
+  // Roteamento pelo hash da URL
+  const handleHashChange = () => {
+    const hash = window.location.hash;
+    if (!db.isAuthenticated()) return;
+    if (hash.startsWith('#/listas/')) {
+      const lid = hash.replace('#/listas/', '');
+      if (lid && lid !== state.activeListId) {
+        switchAppTab('listas');
+        openList(lid);
+      }
+    } else if (hash === '#/listas' || hash === '' || hash === '#/') {
+      if (state.activeListId) showDashboard();
+      else switchAppTab('listas');
+    } else if (hash === '#/ranking') {
+      switchAppTab('ranking');
+    } else if (hash === '#/carteira') {
+      switchAppTab('carteira');
+    } else if (hash === '#/historico') {
+      switchAppTab('historico');
+    } else if (hash === '#/perfil') {
+      switchAppTab('perfil');
+    } else if (hash === '#/termos') {
+      switchAppTab('termos');
+    }
+  };
+  window.addEventListener('hashchange', handleHashChange);
+
+  // Interações de Busca e Filtro Tailwind
+  const searchInput = document.getElementById('searchInput');
+  let currentFilter = 'all';
+
+  window.applyFilterAndSearch = function() {
+    const query = (searchInput?.value || '').toLowerCase().trim();
+    let visibleCount = 0;
+    const cards = Array.from(document.querySelectorAll('.list-card'));
+    const emptyState = document.getElementById('empty-state-listas');
+
+    cards.forEach(card => {
+      const title = (card.getAttribute('data-title') || '').toLowerCase();
+      const status = card.getAttribute('data-status') || '';
+
+      const matchesQuery = !query || title.includes(query);
+      
+      let matchesFilter = false;
+      if (currentFilter === 'all') matchesFilter = true;
+      else if (currentFilter === 'in_progress' && status !== 'completed') matchesFilter = true;
+      else if (currentFilter === 'pending' && status === 'pending') matchesFilter = true;
+      else if (currentFilter === 'completed' && status === 'completed') matchesFilter = true;
+
+      if (matchesQuery && matchesFilter) {
+        card.classList.remove('hidden');
+        card.style.display = 'flex';
+        visibleCount++;
+      } else {
+        card.classList.add('hidden');
+        card.style.display = 'none';
+      }
+    });
+
+    if (visibleCount === 0 && cards.length > 0) {
+      emptyState?.classList.remove('hidden');
+      emptyState?.classList.add('flex');
+      const spanMsg = emptyState?.querySelector('.text-label-lg');
+      if(spanMsg) spanMsg.textContent = 'Nenhum resultado';
+    } else if (cards.length > 0) {
+      emptyState?.classList.add('hidden');
+      emptyState?.classList.remove('flex');
+    }
+  };
+
+  document.getElementById('toggleSearchBtn')?.addEventListener('click', () => {
+    const searchContainer = document.getElementById('searchContainer');
+    if (!searchContainer) return;
+    const isHidden = searchContainer.classList.contains('hidden');
+    if (isHidden) {
+      searchContainer.classList.remove('hidden');
+      searchInput?.focus();
+    } else {
+      searchContainer.classList.add('hidden');
+      if (searchInput) searchInput.value = '';
+      applyFilterAndSearch();
+    }
+  });
+
+  document.getElementById('clearSearchBtn')?.addEventListener('click', () => {
+    if (searchInput) {
+      searchInput.value = '';
+      searchInput.focus();
+      applyFilterAndSearch();
+    }
+  });
+
+  searchInput?.addEventListener('input', applyFilterAndSearch);
+
+  document.querySelectorAll('.filter-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('.filter-chip').forEach(c => {
+        c.classList.remove('bg-primary', 'text-on-primary', 'shadow-sm');
+        c.classList.add('bg-surface-container', 'text-on-surface-variant');
+        c.setAttribute('aria-selected', 'false');
+      });
+
+      chip.classList.add('bg-primary', 'text-on-primary', 'shadow-sm');
+      chip.classList.remove('bg-surface-container', 'text-on-surface-variant');
+      chip.setAttribute('aria-selected', 'true');
+
+      currentFilter = chip.getAttribute('data-filter') || 'all';
+      applyFilterAndSearch();
+    });
+  });
+
   await loadDataFromDb();
   checkUrlInviteParam();
-});
 
+  // Define hash inicial se não houver
+  if (!window.location.hash) {
+    window.history.replaceState({}, '', '#/listas');
+  }
+});

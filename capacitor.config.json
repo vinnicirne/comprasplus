@@ -1,6 +1,6 @@
 {
   "appId": "com.vinnicirne.listadecomprasplus",
-  "appName": "Lista de Compras Plus",
+  "appName": "Compras Plus",
   "webDir": "www",
   "bundledWebRuntime": false,
   "server": {

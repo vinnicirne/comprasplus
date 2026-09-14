@@ -19,11 +19,6 @@ export default function handler(req, res) {
                       process.env.VITE_SUPABASE_URL || '';
 
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
-                      process.env.NEXT_PUBLIC_SUPABASE_KEY || 
-                      process.env.NEXT_SUPABASE_KEY || 
-                      process.env.NEXT_SUPABASE_ANON_KEY || 
-                      process.env.SUPABASE_KEY || 
-                      process.env.SUPABASE_ANON_KEY || 
                       process.env.VITE_SUPABASE_ANON_KEY || '';
 
   return res.status(200).json({

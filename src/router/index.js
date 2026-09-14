@@ -1,0 +1,129 @@
+import page from 'page';
+import { appStore } from '../store/appStore.js';
+import { LoginView } from '../views/LoginView.js';
+import { DashboardView } from '../views/DashboardView.js';
+import { ListDetailView } from '../views/ListDetailView.js';
+import { WalletView } from '../views/WalletView.js';
+import { ProfileView } from '../views/ProfileView.js';
+import { AdminView } from '../views/AdminView.js';
+import { HistoryView } from '../views/HistoryView.js';
+import { isAdmin } from '../services/authService.js';
+
+// Wire up bottom nav tab clicks
+function initNav() {
+  const navTabs = document.querySelectorAll('.app-nav-tab');
+  navTabs.forEach(tab => {
+    if (!tab.dataset.bound) {
+      tab.dataset.bound = '1';
+      tab.addEventListener('click', () => {
+        const target = tab.dataset.target;
+        if (target) page(target);
+      });
+    }
+  });
+
+  // Mostra ou oculta o tab de admin conforme privilégio
+  const adminTab = document.getElementById('tab-nav-admin');
+  if (adminTab) {
+    if (isAdmin()) {
+      adminTab.classList.remove('hidden');
+    } else {
+      adminTab.classList.add('hidden');
+    }
+  }
+}
+
+// Update active tab based on current path
+function updateActiveTab(path) {
+  const navTabs = document.querySelectorAll('.app-nav-tab');
+  navTabs.forEach(tab => {
+    const target = tab.dataset.target;
+    if (target === path) {
+      tab.classList.add('text-primary', 'bg-primary-fixed/30');
+      tab.classList.remove('text-on-surface-variant');
+    } else {
+      tab.classList.remove('text-primary', 'bg-primary-fixed/30');
+      tab.classList.add('text-on-surface-variant');
+    }
+  });
+
+  // Atualiza visibilidade do tab admin caso estado de auth tenha mudado
+  const adminTab = document.getElementById('tab-nav-admin');
+  if (adminTab) {
+    if (isAdmin()) {
+      adminTab.classList.remove('hidden');
+    } else {
+      adminTab.classList.add('hidden');
+    }
+  }
+}
+
+page('/', () => {
+  if (appStore.state.currentUser) {
+    page.redirect('/dashboard');
+  } else {
+    LoginView.render();
+  }
+});
+
+page('/dashboard', () => {
+  if (!appStore.state.currentUser) {
+    page.redirect('/');
+    return;
+  }
+  const header = document.getElementById('main-app-header');
+  if (header) header.classList.remove('hidden');
+  updateActiveTab('/dashboard');
+  DashboardView.render();
+});
+
+page('/lista/:id', (ctx) => {
+  if (!appStore.state.currentUser) {
+    page.redirect('/');
+    return;
+  }
+  updateActiveTab('');
+  const header = document.getElementById('main-app-header');
+  if (header) header.classList.add('hidden');
+  const listId = ctx.params.id;
+  ListDetailView.render(listId);
+});
+
+function guardedRoute(renderFn, navPath) {
+  return () => {
+    if (!appStore.state.currentUser) { page.redirect('/'); return; }
+    const header = document.getElementById('main-app-header');
+    if (header) header.classList.remove('hidden');
+    updateActiveTab(navPath);
+    renderFn();
+  };
+}
+
+page('/carteira', guardedRoute(() => WalletView.render(),  '/carteira'));
+page('/historico',guardedRoute(() => HistoryView.render(), '/historico'));
+page('/perfil',   guardedRoute(() => ProfileView.render(),    '/perfil'));
+page('/admin',    guardedRoute(() => {
+  if (!isAdmin()) {
+    page.redirect('/dashboard');
+    return;
+  }
+  AdminView.render();
+}, '/admin'));
+
+page('*', () => {
+  // Mostra o shell mas indica 404 na router-view
+  const shell = document.getElementById('main-app-shell');
+  if (shell) shell.classList.remove('hidden');
+  const rv = document.getElementById('router-view');
+  if (rv) rv.innerHTML = `
+    <div class="flex flex-col items-center justify-center min-h-[60vh] gap-4 p-8 text-center">
+      <span class="material-symbols-outlined text-[60px] text-outline">error</span>
+      <h1 class="font-headline-sm text-on-surface font-bold">404</h1>
+      <p class="text-on-surface-variant">Página não encontrada</p>
+    </div>`;
+});
+
+export function startRouter() {
+  initNav();
+  page.start({ hashbang: true }); // Hash routing para PWA estático
+}

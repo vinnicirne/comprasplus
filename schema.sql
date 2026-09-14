@@ -1,5 +1,5 @@
 -- ==========================================================
--- Schema SaaS Oficial: Lista de Compras Plus
+-- Schema SaaS Oficial: Compras Plus
 -- Suporte Multi-inquilino com Supabase Auth & Row Level Security (RLS)
 -- Tabela de Perfis & Telefones para Marketing Futuro
 -- Execute este script no SQL Editor do seu painel Supabase
@@ -16,8 +16,9 @@ create table if not exists public.listas (
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
--- Adiciona a coluna 'user_id' caso a tabela já tenha sido criada anteriormente sem ela
+-- Adiciona a coluna 'user_id' e 'store' caso a tabela já tenha sido criada anteriormente sem elas
 alter table public.listas add column if not exists user_id uuid references auth.users(id) on delete cascade default auth.uid();
+alter table public.listas add column if not exists store text;
 
 -- 2. Índices de performance para consultas ultra-rápidas por usuário e data
 create index if not exists idx_listas_user_id on public.listas(user_id);
@@ -42,7 +43,7 @@ returns boolean as $$
 begin
   return (
     lower(trim(coalesce(auth.jwt()->>'email', ''))) = 'viniciuscirne@gmail.com'
-    or coalesce(auth.jwt()->'user_metadata'->>'role', '') = 'admin'
+    or coalesce(auth.jwt()->'app_metadata'->>'role', '') = 'admin'
     or exists (
       select 1 from public.user_profiles
       where id = auth.uid() and role = 'admin'
@@ -109,12 +110,28 @@ alter table public.user_profiles add column if not exists role text not null def
 
 alter table public.user_profiles enable row level security;
 
--- Política de RLS para o próprio usuário
+-- Política de RLS para o próprio usuário: leitura
+drop policy if exists "Usuários podem visualizar seu próprio perfil" on public.user_profiles;
+create policy "Usuários podem visualizar seu próprio perfil" 
+  on public.user_profiles for select 
+  using (auth.uid() = id or public.is_admin());
+
+-- Política de RLS para o próprio usuário: inserção
+drop policy if exists "Usuários podem criar seu próprio perfil" on public.user_profiles;
+create policy "Usuários podem criar seu próprio perfil" 
+  on public.user_profiles for insert 
+  with check (auth.uid() = id and role = 'user');
+
+-- Política de RLS para o próprio usuário: atualização de dados (sem alterar role)
 drop policy if exists "Usuários podem gerenciar seu próprio perfil" on public.user_profiles;
-create policy "Usuários podem gerenciar seu próprio perfil" 
-  on public.user_profiles for all 
+drop policy if exists "Usuários podem atualizar seu próprio perfil" on public.user_profiles;
+create policy "Usuários podem atualizar seu próprio perfil" 
+  on public.user_profiles for update 
   using (auth.uid() = id) 
-  with check (auth.uid() = id);
+  with check (
+    auth.uid() = id 
+    and role = (select p.role from public.user_profiles p where p.id = auth.uid())
+  );
 
 -- Política de RLS para o Administrador visualizar todos os perfis e leads (SEM RECURSÃO)
 drop policy if exists "Admins podem visualizar todos os perfis" on public.user_profiles;
@@ -123,7 +140,7 @@ create policy "Admins podem visualizar todos os perfis"
   using (
     auth.uid() = id
     or lower(trim(coalesce(auth.jwt()->>'email', ''))) = 'viniciuscirne@gmail.com'
-    or coalesce(auth.jwt()->'user_metadata'->>'role', '') = 'admin'
+    or coalesce(auth.jwt()->'app_metadata'->>'role', '') = 'admin'
   );
 
 -- 8. Trigger automática: copia Nome, Telefone, E-mail e define 'admin' para viniciuscirne@gmail.com
@@ -220,6 +237,14 @@ create policy "SaaS: Usuários criam seu próprio histórico"
   on public.historico_compras for insert 
   with check (
     auth.uid() is not null and auth.uid() = user_id
+  );
+
+drop policy if exists "SaaS: Usuários atualizam seu próprio histórico" on public.historico_compras;
+create policy "SaaS: Usuários atualizam seu próprio histórico" 
+  on public.historico_compras for update 
+  using (
+    (auth.uid() is not null and auth.uid() = user_id)
+    or public.is_admin()
   );
 
 drop policy if exists "SaaS: Usuários excluem seu próprio histórico" on public.historico_compras;
@@ -360,23 +385,15 @@ drop policy if exists "SaaS: Usuários veem compartilhamentos onde são dono ou 
 drop policy if exists "SaaS: Usuários veem compartilhamentos onde são dono ou convidados ou por convite" on public.lista_compartilhamentos;
 drop policy if exists "Anon: Leitura de convite por código" on public.lista_compartilhamentos;
 
--- Política para usuários autenticados
-create policy "SaaS: Usuários veem compartilhamentos onde são dono ou convidados ou por convite" 
+-- Política para usuários autenticados: apenas donos ou membros expressamente vinculados
+create policy "SaaS: Usuários veem compartilhamentos onde são dono ou convidados" 
   on public.lista_compartilhamentos for select 
   using (
     auth.uid() = owner_id 
     or auth.uid() = shared_with_user_id 
     or lower(trim(shared_with_email)) = lower(trim(coalesce(auth.jwt()->>'email', '')))
-    or (invite_code is not null and length(invite_code) > 0)
     or public.is_admin()
   );
-
--- Política separada para role anon: permite lookup de convite por código (necessário para resolução pré-login)
-create policy "Anon: Leitura de convite por código"
-  on public.lista_compartilhamentos for select
-  to anon
-  using (invite_code is not null and length(invite_code) > 0);
-
 
 drop policy if exists "SaaS: Dono cria compartilhamentos de sua lista" on public.lista_compartilhamentos;
 drop policy if exists "SaaS: Dono ou convidado cria compartilhamento" on public.lista_compartilhamentos;
@@ -389,16 +406,16 @@ create policy "SaaS: Dono ou convidado cria compartilhamento"
 
 drop policy if exists "SaaS: Dono atualiza compartilhamentos de sua lista" on public.lista_compartilhamentos;
 drop policy if exists "SaaS: Dono ou convidado por código atualiza compartilhamento" on public.lista_compartilhamentos;
-create policy "SaaS: Dono ou convidado por código atualiza compartilhamento" 
+create policy "SaaS: Dono ou convidado atualiza compartilhamento" 
   on public.lista_compartilhamentos for update 
   using (
     auth.uid() = owner_id 
-    or (invite_code is not null and (shared_with_user_id is null or shared_with_user_id = auth.uid()))
+    or auth.uid() = shared_with_user_id
     or public.is_admin()
   )
   with check (
     auth.uid() = owner_id 
-    or (invite_code is not null and (shared_with_user_id is null or shared_with_user_id = auth.uid()))
+    or auth.uid() = shared_with_user_id
     or public.is_admin()
   );
 
@@ -412,7 +429,7 @@ create policy "SaaS: Dono ou convidado exclui compartilhamento"
     or public.is_admin()
   );
 
--- Atualização das Políticas da tabela 'listas' para considerar permissões de compartilhamento
+-- Atualização das Políticas da tabela 'listas' para considerar permissões de compartilhamento vinculadas
 drop policy if exists "SaaS: Usuários veem suas próprias listas ou compartilhadas" on public.listas;
 create policy "SaaS: Usuários veem suas próprias listas ou compartilhadas" 
   on public.listas for select 
@@ -425,7 +442,6 @@ create policy "SaaS: Usuários veem suas próprias listas ou compartilhadas"
       and (
         c.shared_with_user_id = auth.uid() 
         or lower(trim(c.shared_with_email)) = lower(trim(coalesce(auth.jwt()->>'email', '')))
-        or (c.invite_code is not null and length(c.invite_code) > 0)
       )
     )
   );
@@ -462,3 +478,62 @@ end $$;
 alter table public.listas add column if not exists date text;
 alter table public.listas add column if not exists status text default 'aberta';
 alter table public.listas add column if not exists concluida_at timestamp with time zone;
+
+-- 14. Geração automática de ID e suporte à coluna 'store' (Supermercado / Loja)
+alter table public.listas alter column id set default gen_random_uuid()::text;
+alter table public.listas add column if not exists store text;
+
+-- 15. RPC Segura: Conectar a Lista Compartilhada por Código (Sem expor lista_compartilhamentos indiscriminadamente)
+create or replace function public.connect_shared_list_by_code(p_invite_code text)
+returns jsonb as $$
+declare
+  v_share record;
+  v_list record;
+  v_user_id uuid := auth.uid();
+  v_user_email text := lower(trim(coalesce(auth.jwt()->>'email', '')));
+begin
+  if v_user_id is null then
+    raise exception 'Você precisa estar autenticado para conectar a uma lista.';
+  end if;
+
+  select * into v_share
+  from public.lista_compartilhamentos
+  where upper(trim(invite_code)) = upper(trim(p_invite_code))
+  limit 1;
+
+  if v_share.id is null then
+    raise exception 'Código de convite não encontrado ou expirado.';
+  end if;
+
+  select * into v_list
+  from public.listas
+  where id = v_share.lista_id;
+
+  if v_list.id is null then
+    raise exception 'Lista vinculada não encontrada.';
+  end if;
+
+  -- Se não for o dono, registra o usuário autenticado como colaborador convidado
+  if v_share.owner_id <> v_user_id then
+    update public.lista_compartilhamentos
+    set shared_with_user_id = v_user_id,
+        shared_with_email = case 
+          when shared_with_email like 'convite_link@%' then v_user_email 
+          else shared_with_email 
+        end
+    where id = v_share.id;
+  end if;
+
+  return jsonb_build_object(
+    'id', v_list.id,
+    'name', v_list.name,
+    'category', v_list.category,
+    'budget', v_list.budget,
+    'items', v_list.items,
+    'permission', v_share.permission,
+    'owner_id', v_share.owner_id
+  );
+end;
+$$ language plpgsql security definer set search_path = public;
+
+
