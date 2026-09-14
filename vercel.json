@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "outputDirectory": ".",
+  "outputDirectory": "dist",
   "cleanUrls": true,
   "headers": [
     {

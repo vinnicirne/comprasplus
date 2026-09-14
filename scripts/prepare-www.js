@@ -26,9 +26,7 @@ const filesToCopy = [
   'env.js',
   'style.css',
   'manifest.json',
-  'sw.js',
-  'privacidade.html',
-  'termos.html'
+  'sw.js'
 ];
 
 for (const file of filesToCopy) {
