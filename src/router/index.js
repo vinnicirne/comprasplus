@@ -9,7 +9,35 @@ import { AdminView } from '../views/AdminView.js';
 import { HistoryView } from '../views/HistoryView.js';
 import { isAdmin } from '../services/authService.js';
 
-// Wire up bottom nav tab clicks
+let closeDrawerFn = null;
+
+export function closeDrawer() {
+  if (closeDrawerFn) closeDrawerFn();
+}
+
+// Instala eventos para abrir e fechar o Menu Lateral (Drawer)
+function setupDrawer() {
+  const btnHamburger = document.getElementById('btn-hamburger');
+  const drawer = document.getElementById('app-side-drawer');
+  const overlay = document.getElementById('app-side-drawer-overlay');
+
+  if (!btnHamburger || !drawer || !overlay) return;
+
+  function openDrawer() {
+    drawer.classList.remove('-translate-x-full');
+    overlay.classList.remove('opacity-0', 'pointer-events-none');
+  }
+
+  closeDrawerFn = () => {
+    drawer.classList.add('-translate-x-full');
+    overlay.classList.add('opacity-0', 'pointer-events-none');
+  };
+
+  btnHamburger.addEventListener('click', openDrawer);
+  overlay.addEventListener('click', closeDrawer);
+}
+
+// Wire up side nav tab clicks
 function initNav() {
   const navTabs = document.querySelectorAll('.app-nav-tab');
   navTabs.forEach(tab => {
@@ -17,7 +45,10 @@ function initNav() {
       tab.dataset.bound = '1';
       tab.addEventListener('click', () => {
         const target = tab.dataset.target;
-        if (target) page(target);
+        if (target) {
+          page(target);
+          closeDrawer();
+        }
       });
     }
   });
@@ -39,11 +70,11 @@ function updateActiveTab(path) {
   navTabs.forEach(tab => {
     const target = tab.dataset.target;
     if (target === path) {
-      tab.classList.add('active', 'text-primary', 'rounded-full');
+      tab.classList.add('bg-surface-container', 'text-primary');
       tab.classList.remove('text-on-surface-variant');
     } else {
-      tab.classList.remove('active', 'text-primary');
-      tab.classList.add('text-on-surface-variant', 'hover:text-primary', 'rounded-full');
+      tab.classList.remove('bg-surface-container', 'text-primary');
+      tab.classList.add('text-on-surface-variant', 'hover:bg-surface-container', 'hover:text-primary');
     }
   });
 
@@ -138,6 +169,7 @@ page('*', () => {
 });
 
 export function startRouter() {
+  setupDrawer();
   initNav();
   page.start({ hashbang: true }); // Hash routing para PWA estático
 }

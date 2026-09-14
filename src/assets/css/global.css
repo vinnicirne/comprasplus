@@ -137,20 +137,9 @@ body.has-native-ad-banner {
 /* ==========================================================
    Bottom Navigation (Navegação Principal)
    ========================================================== */
-#app-main-nav {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 999;
-  background-color: var(--surface);
-  border-top: 1px solid rgba(188, 202, 192, 0.3);
-  padding-bottom: var(--safe-bottom);
-  transition: bottom 0.3s ease;
-}
 
-body.has-native-ad-banner #app-main-nav {
-  bottom: var(--admob-banner-height, 80px) !important;
+body.has-native-ad-banner #router-view {
+  padding-bottom: var(--admob-banner-height, 80px) !important;
 }
 
 /* ==========================================================
@@ -1641,76 +1630,6 @@ input:focus, select:focus {
 /* ==========================================================
    NAVEGAÇÃO PRINCIPAL POR ABAS (MINHAS LISTAS vs HISTÓRICO)
    ========================================================== */
-
-.app-tab-nav {
-  display: flex;
-  background: rgba(250, 248, 255, 0.88);
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
-  padding: 0.5rem 1rem calc(var(--safe-bottom) + 0.5rem) 1rem;
-  border-top: 1px solid rgba(234, 237, 255, 0.8);
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  width: 100vw;
-  z-index: 500;
-  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.04);
-  gap: 0.25rem;
-  justify-content: space-between;
-}
-
-.app-nav-tab {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.2rem;
-  padding: 0.5rem 0;
-  border: none;
-  background: transparent;
-  color: var(--text-light);
-  font-weight: 600;
-  font-size: 0.7rem;
-  border-radius: var(--radius-lg);
-  cursor: pointer;
-  transition: var(--transition);
-  position: relative;
-}
-
-.app-nav-tab:hover {
-  color: var(--primary);
-  background-color: rgba(0, 105, 72, 0.08);
-}
-
-.app-nav-tab.active {
-  color: var(--primary);
-}
-
-.app-nav-tab.active::before {
-  content: '';
-  position: absolute;
-  top: 0.25rem;
-  width: 48px;
-  height: 28px;
-  background: rgba(133, 248, 196, 0.3);
-  border-radius: var(--radius-full);
-  z-index: -1;
-  transition: var(--transition);
-}
-
-.app-nav-tab .nav-tab-icon {
-  font-size: 1.25rem;
-  line-height: 1;
-  margin-bottom: 0.15rem;
-  font-family: 'Material Symbols Outlined';
-  font-weight: 300;
-}
-
-.app-nav-tab.active .nav-tab-icon {
-  font-weight: 600;
-}
-
 /* Botão Finalizar Compra no Detalhe da Lista */
 .btn-finish-sm {
   background: linear-gradient(135deg, #10b981 0%, #059669 100%);

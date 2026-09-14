@@ -165,6 +165,8 @@ export const WalletView = {
             </div>
 
             <form id="form-nova-entrada" class="flex flex-col gap-3.5">
+              <input type="hidden" id="wallet-entry-id">
+              
               <!-- Seletor de Tipo: Entrada vs Despesa -->
               <div class="flex flex-col gap-1">
                 <label class="font-label-sm text-xs font-semibold text-on-surface-variant uppercase">Tipo de Movimentação *</label>
@@ -249,7 +251,7 @@ export const WalletView = {
                 </div>
               </div>
 
-              <!-- Painel Despesas: Parcelamento & Recorrência -->
+              <!-- Painel Parcelamento (Apenas Saída) -->
               <div id="secao-despesa-avancada" class="hidden flex flex-col gap-3 p-3 bg-surface-container-low rounded-2xl border border-outline-variant/30">
                 <!-- Parcelamento -->
                 <div class="flex items-center justify-between">
@@ -272,14 +274,16 @@ export const WalletView = {
                   </div>
                   <span class="text-[11px] text-primary font-medium" id="preview-parcelas">Ex: 2x de R$ 0,00</span>
                 </div>
+              </div>
 
-                <!-- Recorrência (Pagamento Fixo) -->
-                <div class="flex items-center justify-between pt-2 border-t border-outline-variant/20">
+              <!-- Painel Recorrência (Qualquer Lançamento) -->
+              <div id="secao-recorrencia" class="flex flex-col gap-3 p-3 bg-surface-container-low rounded-2xl border border-outline-variant/30">
+                <div class="flex items-center justify-between">
                   <div class="flex items-center gap-2">
                     <span class="material-symbols-outlined text-primary text-[20px]">autorenew</span>
                     <div class="flex flex-col">
                       <span class="text-xs font-bold text-on-surface">Pagamento Recorrente / Fixo</span>
-                      <span class="text-[10px] text-on-surface-variant">Gera a próxima cobrança ao dar baixa</span>
+                      <span class="text-[10px] text-on-surface-variant">Gera a próxima ocorrência ao dar baixa</span>
                     </div>
                   </div>
                   <input type="checkbox" id="check-recorrente" class="w-4 h-4 rounded text-primary accent-primary cursor-pointer">
@@ -294,7 +298,7 @@ export const WalletView = {
                       <option value="anual">Anual (uma vez por ano)</option>
                     </select>
                   </div>
-                  <span class="text-[11px] text-secondary font-medium" id="preview-recorrente">Ao dar baixa, o sistema criará a próxima ocorrência automaticamente.</span>
+                  <span class="text-[11px] text-secondary font-medium" id="preview-recorrente">Ao dar baixa, a próxima ocorrência é criada automaticamente.</span>
                 </div>
               </div>
 
@@ -438,13 +442,51 @@ export const WalletView = {
     }
   },
 
-  openModal() {
+  openModal(entry = null) {
     const modal = document.getElementById('modal-nova-entrada');
     const sheet = document.getElementById('modal-nova-entrada-sheet');
-    const inputDate = document.getElementById('entrada-data');
-    if (inputDate) {
-      inputDate.value = new Date().toISOString().split('T')[0];
+    const form = document.getElementById('form-nova-entrada');
+    
+    if (form) form.reset();
+    
+    document.getElementById('wallet-entry-id').value = entry ? entry.id : '';
+    document.getElementById('modal-titulo').textContent = entry ? 'Editar Lançamento' : 'Novo Lançamento';
+
+    if (entry) {
+      // Popular campos
+      const radioTipo = document.querySelector(`input[name="transacao-tipo"][value="${entry.type}"]`);
+      if (radioTipo) radioTipo.checked = true;
+      this.handleTipoChange(entry.type);
+
+      document.getElementById('entrada-descricao').value = entry.description || '';
+      document.getElementById('entrada-valor').value = entry.amount || '';
+      const inputDate = document.getElementById('entrada-data');
+      if (inputDate) inputDate.value = entry.dueDate || entry.entryDate || new Date().toISOString().split('T')[0];
+      
+      const catSelect = document.getElementById('entrada-categoria');
+      if (catSelect) catSelect.value = entry.category || '';
+
+      const radioStatus = document.querySelector(`input[name="entrada-status"][value="${entry.status}"]`);
+      if (radioStatus) radioStatus.checked = true;
+
+      const checkRecorrente = document.getElementById('check-recorrente');
+      const boxRecorrente = document.getElementById('box-recorrente-config');
+      const selPeriodo = document.getElementById('select-periodo-recorrente');
+      if (checkRecorrente) checkRecorrente.checked = entry.isRecurrent || false;
+      if (boxRecorrente) entry.isRecurrent ? boxRecorrente.classList.remove('hidden') : boxRecorrente.classList.add('hidden');
+      if (selPeriodo) selPeriodo.value = entry.recurrentPeriod || 'mensal';
+
+      // Parcelamento não é editável na mesma lógica, mas podemos populá-lo
+      const checkParcelado = document.getElementById('check-parcelamento');
+      if (checkParcelado) checkParcelado.checked = false; 
+    } else {
+      const inputDate = document.getElementById('entrada-data');
+      if (inputDate) {
+        inputDate.value = new Date().toISOString().split('T')[0];
+      }
+      this.handleTipoChange('entrada'); // Reset default
     }
+
     if (modal && sheet) {
       modal.classList.remove('opacity-0', 'pointer-events-none');
       sheet.classList.remove('translate-y-full');
@@ -669,6 +711,9 @@ export const WalletView = {
                 </button>
               ` : ''}
             </div>
+            <button class="btn-edit-entry w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:text-primary hover:bg-primary-container/30 transition-all active:scale-90" data-id="${entry.id}" title="Editar Lançamento">
+              <span class="material-symbols-outlined text-[18px]">edit</span>
+            </button>
             <button class="btn-delete-entry w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:text-error hover:bg-error-container/30 transition-all active:scale-90" data-id="${entry.id}" title="Excluir Lançamento">
               <span class="material-symbols-outlined text-[18px]">delete</span>
             </button>
@@ -727,12 +772,23 @@ export const WalletView = {
       });
     });
 
+    // Listener edição
+    container.querySelectorAll('.btn-edit-entry').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = btn.dataset.id;
+        const entry = this.walletEntries.find(w => w.id === id);
+        if (entry) this.openModal(entry);
+      });
+    });
+
     function isRecebido(e) {
       return e.status === 'recebido' || e.status === 'pago';
     }
   },
 
   async handleFormSubmit() {
+    const editId = document.getElementById('wallet-entry-id').value;
     const tipoRadio = document.querySelector('input[name="transacao-tipo"]:checked');
     const tipo = tipoRadio ? tipoRadio.value : 'entrada';
     const desc = document.getElementById('entrada-descricao').value.trim();
@@ -745,7 +801,7 @@ export const WalletView = {
     const isParcelado = tipo === 'saida' && Boolean(document.getElementById('check-parcelamento')?.checked);
     const qtdParcelas = isParcelado ? parseInt(document.getElementById('select-qtd-parcelas')?.value) || 2 : 1;
 
-    const isRecorrente = tipo === 'saida' && Boolean(document.getElementById('check-recorrente')?.checked);
+    const isRecorrente = Boolean(document.getElementById('check-recorrente')?.checked);
     const periodoRecorrente = isRecorrente ? document.getElementById('select-periodo-recorrente')?.value || 'mensal' : 'mensal';
 
     if (!desc || !val || isNaN(val) || val <= 0) {
@@ -763,7 +819,7 @@ export const WalletView = {
     btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">autorenew</span> Salvando...';
 
     try {
-      await walletService.saveWalletEntry({
+      const payload = {
         description: desc,
         amount: val,
         type: tipo,
@@ -775,12 +831,18 @@ export const WalletView = {
         installmentTotal: qtdParcelas,
         isRecurrent: isRecorrente,
         recurrentPeriod: periodoRecorrente
-      });
+      };
+
+      if (editId) {
+        await walletService.updateWalletEntry(editId, payload);
+        showToast('Lançamento atualizado com sucesso!', 'success');
+      } else {
+        await walletService.saveWalletEntry(payload);
+        showToast(tipo === 'saida' ? (isParcelado ? `💳 Compra parcelada em ${qtdParcelas}x cadastrada!` : '🔴 Despesa registrada com sucesso!') : '💰 Entrada registrada com sucesso!', 'success');
+      }
 
       this.closeModal();
-      document.getElementById('form-nova-entrada').reset();
       await this.loadData();
-      showToast(tipo === 'saida' ? (isParcelado ? `💳 Compra parcelada em ${qtdParcelas}x cadastrada!` : '🔴 Despesa registrada com sucesso!') : '💰 Entrada registrada com sucesso!', 'success');
       window.dispatchEvent(new CustomEvent('user-profile-updated'));
     } catch (err) {
       showToast('Erro ao gravar lançamento: ' + (err.message || 'Falha ao salvar'), 'error');

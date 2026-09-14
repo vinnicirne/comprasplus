@@ -381,6 +381,84 @@ export async function saveWalletEntry(entry) {
 }
 
 /**
+ * Atualiza um lançamento financeiro existente
+ */
+export async function updateWalletEntry(id, payload) {
+  const user = appStore.state.currentUser;
+  if (!user) throw new Error('Usuário não autenticado.');
+
+  let record = null;
+  const store = await getStore('carteira');
+  record = await new Promise((resolve) => {
+    const req = store.get(id);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => resolve(null);
+  });
+
+  if (!record) throw new Error('Lançamento não encontrado.');
+
+  // Atualiza os campos
+  const updated = { ...record, ...payload };
+  
+  // Recalcula ano/mês se a data mudou
+  if (payload.entryDate || payload.dueDate) {
+    const dateStr = payload.entryDate || payload.dueDate;
+    const parts = dateStr.split('-');
+    updated.year = Number(parts[0]);
+    updated.month = Number(parts[1]);
+    updated.day = Number(parts[2]);
+    updated.yearMonth = `${updated.year}-${String(updated.month).padStart(2, '0')}`;
+  }
+
+  // Atualiza no IndexedDB
+  try {
+    const storeWrite = await getStore('carteira', 'readwrite');
+    await new Promise((res) => {
+      const req = storeWrite.put(updated);
+      req.onsuccess = () => res(true);
+      req.onerror = () => res(false);
+    });
+  } catch (e) {
+    console.warn('Erro ao atualizar IndexedDB:', e);
+  }
+
+  // Atualiza na Nuvem (se logado real)
+  if (user.id !== 'guest') {
+    try {
+      const cloudPayload = {
+        id: updated.id,
+        user_id: updated.userId,
+        description: updated.description,
+        amount: updated.amount,
+        type: updated.type,
+        category: updated.category,
+        status: updated.status,
+        due_date: updated.dueDate,
+        paid_at: updated.paidAt,
+        is_recurrent: updated.isRecurrent,
+        recurrent_period: updated.recurrentPeriod,
+        is_installment: updated.isInstallment,
+        installment_current: updated.installmentCurrent,
+        installment_total: updated.installmentTotal,
+        parent_id: updated.parentId,
+        related_list_id: updated.relatedListId,
+        entry_date: updated.entryDate,
+        day: updated.day,
+        month: updated.month,
+        year: updated.year,
+        created_at: updated.createdAt
+      };
+
+      await supabase.from('carteira_entradas').upsert(cloudPayload);
+    } catch (cloudErr) {
+      console.warn('Erro ao atualizar na nuvem:', cloudErr);
+    }
+  }
+
+  return updated;
+}
+
+/**
  * Dá baixa em uma conta/despesa marcando como 'pago'.
  * Se for recorrente, gera automaticamente a PRÓXIMA ocorrência (com novo due_date)
  */

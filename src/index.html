@@ -22,6 +22,9 @@
       <header id="main-app-header" class="sticky top-0 z-50 bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] pt-safe">
         <div class="h-16 px-4 flex items-center justify-between gap-2">
           <div class="flex items-center gap-2.5 min-w-0">
+            <button id="btn-hamburger" type="button" class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-high active:scale-95 transition-all text-on-surface" aria-label="Abrir Menu">
+              <span class="material-symbols-outlined text-[24px]">menu</span>
+            </button>
             <img src="/icons/icon-192.png" alt="Compras Plus Logo" class="h-9 w-9 rounded-xl object-contain shrink-0 shadow-sm">
             <span class="font-extrabold text-lg tracking-tight text-on-surface">Compras <span class="text-primary font-black">Plus</span></span>
           </div>
@@ -35,30 +38,38 @@
         </div>
       </header>
 
-      <nav id="app-main-nav">
-        <div class="app-nav-container flex justify-around items-center h-[72px] pb-1 px-1 max-w-lg mx-auto">
-          <button type="button" class="app-nav-tab active flex flex-col items-center justify-center flex-1 max-w-[72px] min-w-0 h-14 px-1 transition-all gap-0.5 text-primary font-label-md rounded-full cursor-pointer" id="tab-nav-listas" data-target="/dashboard">
-            <span class="material-symbols-outlined text-[20px]">checklist</span>
-            <span class="font-label-sm text-[11px] leading-tight font-semibold truncate w-full text-center">Listas</span>
-          </button>
-          <button type="button" class="app-nav-tab flex flex-col items-center justify-center flex-1 max-w-[72px] min-w-0 h-14 px-1 text-on-surface-variant hover:text-primary rounded-full transition-all gap-0.5 cursor-pointer" id="tab-nav-carteira" data-target="/carteira">
-            <span class="material-symbols-outlined text-[20px]">account_balance_wallet</span>
-            <span class="font-label-sm text-[11px] leading-tight font-semibold truncate w-full text-center">Carteira</span>
-          </button>
-          <button type="button" class="app-nav-tab flex flex-col items-center justify-center flex-1 max-w-[72px] min-w-0 h-14 px-1 text-on-surface-variant hover:text-primary rounded-full transition-all gap-0.5 cursor-pointer" id="tab-nav-historico" data-target="/historico">
-            <span class="material-symbols-outlined text-[20px]">receipt_long</span>
-            <span class="font-label-sm text-[11px] leading-tight font-semibold truncate w-full text-center">Histórico</span>
-          </button>
-          <button type="button" class="app-nav-tab flex flex-col items-center justify-center flex-1 max-w-[72px] min-w-0 h-14 px-1 text-on-surface-variant hover:text-primary rounded-full transition-all gap-0.5 cursor-pointer" id="tab-nav-perfil" data-target="/perfil">
-            <span class="material-symbols-outlined text-[20px]">person</span>
-            <span class="font-label-sm text-[11px] leading-tight font-semibold truncate w-full text-center">Perfil</span>
-          </button>
-          <button type="button" class="app-nav-tab hidden flex flex-col items-center justify-center flex-1 max-w-[72px] min-w-0 h-14 px-1 text-on-surface-variant hover:text-primary rounded-full transition-all gap-0.5 cursor-pointer" id="tab-nav-admin" data-target="/admin">
-            <span class="material-symbols-outlined text-[20px]">shield_person</span>
-            <span class="font-label-sm text-[11px] leading-tight font-semibold truncate w-full text-center">Admin</span>
-          </button>
+      <!-- Overlay do Menu Lateral -->
+      <div id="app-side-drawer-overlay" class="fixed inset-0 bg-black/50 z-[99] opacity-0 pointer-events-none transition-opacity duration-300"></div>
+
+      <!-- Menu Lateral (Drawer) -->
+      <aside id="app-side-drawer" class="fixed top-0 left-0 h-full w-64 bg-surface z-[100] shadow-2xl transform -translate-x-full transition-transform duration-300 ease-in-out flex flex-col">
+        <div class="h-16 flex items-center px-4 border-b border-outline-variant/20 pt-safe">
+          <span class="font-extrabold text-lg tracking-tight text-on-surface">Compras <span class="text-primary font-black">Plus</span></span>
         </div>
-      </nav>
+        <nav class="flex-1 py-4 flex flex-col gap-1 px-3">
+          <button type="button" class="app-nav-tab active flex items-center h-12 px-4 gap-3 text-on-surface-variant hover:bg-surface-container hover:text-primary rounded-xl transition-all cursor-pointer font-semibold" id="tab-nav-listas" data-target="/dashboard">
+            <span class="material-symbols-outlined text-[22px]">checklist</span>
+            <span>Listas de Compras</span>
+          </button>
+          <button type="button" class="app-nav-tab flex items-center h-12 px-4 gap-3 text-on-surface-variant hover:bg-surface-container hover:text-primary rounded-xl transition-all cursor-pointer font-semibold" id="tab-nav-carteira" data-target="/carteira">
+            <span class="material-symbols-outlined text-[22px]">account_balance_wallet</span>
+            <span>Carteira & Finanças</span>
+          </button>
+          <button type="button" class="app-nav-tab flex items-center h-12 px-4 gap-3 text-on-surface-variant hover:bg-surface-container hover:text-primary rounded-xl transition-all cursor-pointer font-semibold" id="tab-nav-historico" data-target="/historico">
+            <span class="material-symbols-outlined text-[22px]">receipt_long</span>
+            <span>Histórico Mensal</span>
+          </button>
+          <div class="my-2 border-t border-outline-variant/20"></div>
+          <button type="button" class="app-nav-tab flex items-center h-12 px-4 gap-3 text-on-surface-variant hover:bg-surface-container hover:text-primary rounded-xl transition-all cursor-pointer font-semibold" id="tab-nav-perfil" data-target="/perfil">
+            <span class="material-symbols-outlined text-[22px]">person</span>
+            <span>Meu Perfil</span>
+          </button>
+          <button type="button" class="app-nav-tab hidden flex items-center h-12 px-4 gap-3 text-error hover:bg-error-container hover:text-error rounded-xl transition-all cursor-pointer font-semibold" id="tab-nav-admin" data-target="/admin">
+            <span class="material-symbols-outlined text-[22px]">shield_person</span>
+            <span>Admin</span>
+          </button>
+        </nav>
+      </aside>
       
       <div id="router-view"></div>
     </div>
