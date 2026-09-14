@@ -22,18 +22,18 @@ export const WalletView = {
     routerView.innerHTML = `
       <main class="min-h-screen bg-surface flex flex-col pb-32">
         <!-- Top Bar -->
-        <header class="sticky top-0 z-30 bg-surface/90 backdrop-blur-md pt-safe px-space-md h-16 flex items-center justify-between border-b border-outline-variant/20 shadow-xs">
-          <div class="flex items-center gap-2">
-            <span class="w-10 h-10 rounded-2xl bg-secondary-container text-on-secondary-container flex items-center justify-center">
-              <span class="material-symbols-outlined text-[22px]">account_balance_wallet</span>
+        <header class="sticky top-0 z-30 bg-surface/90 backdrop-blur-md pt-safe px-4 h-16 flex items-center justify-between gap-2 border-b border-outline-variant/20 shadow-xs">
+          <div class="flex items-center gap-2 min-w-0 flex-1">
+            <span class="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-secondary-container text-on-secondary-container flex items-center justify-center shrink-0">
+              <span class="material-symbols-outlined text-[20px] sm:text-[22px]">account_balance_wallet</span>
             </span>
-            <div>
-              <h1 class="font-headline-sm text-headline-sm font-bold text-on-surface leading-tight">Hub de Finanças</h1>
-              <span class="font-body-sm text-on-surface-variant text-xs">Gestão de saldo, contas a pagar e despesas</span>
+            <div class="min-w-0 flex flex-col">
+              <h1 class="font-headline-sm text-[15px] sm:text-headline-sm font-bold text-on-surface leading-tight truncate">Hub de Finanças</h1>
+              <span class="font-body-sm text-on-surface-variant text-[10px] sm:text-xs truncate hidden sm:block">Gestão de saldo, contas a pagar e despesas</span>
             </div>
           </div>
-          <button id="btn-nova-entrada-top" class="h-10 px-3 rounded-xl bg-primary text-on-primary font-label-md font-semibold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all">
-            <span class="material-symbols-outlined text-[18px]">add_circle</span>
+          <button id="btn-nova-entrada-top" class="h-9 px-3 rounded-xl bg-primary text-on-primary font-label-md text-[11px] sm:text-xs font-semibold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all shrink-0 whitespace-nowrap">
+            <span class="material-symbols-outlined text-[16px]">add_circle</span>
             <span>Novo Lançamento</span>
           </button>
         </header>
@@ -95,41 +95,41 @@ export const WalletView = {
 
           <!-- Mini Cards: Contas a Pagar & Próximo Vencimento -->
           <div class="grid grid-cols-3 gap-2">
-            <div class="bg-surface-container-lowest p-3 rounded-2xl border border-outline-variant/30 flex flex-col shadow-xs">
-              <span class="font-label-sm text-[10px] text-on-surface-variant uppercase font-semibold">Contas a Pagar</span>
-              <span class="font-label-lg font-bold text-error text-sm mt-0.5 truncate" id="carteira-sum-a-pagar">R$ 0,00</span>
-              <span class="text-[10px] text-outline truncate" id="carteira-count-a-pagar">0 pendentes</span>
+            <div class="bg-surface-container-lowest p-2 sm:p-3 rounded-2xl border border-outline-variant/30 flex flex-col shadow-xs overflow-hidden">
+              <span class="font-label-sm text-[9px] text-on-surface-variant uppercase font-semibold whitespace-nowrap truncate">Contas a Pagar</span>
+              <span class="font-label-lg font-bold text-error text-xs sm:text-sm mt-0.5 truncate" id="carteira-sum-a-pagar">R$ 0,00</span>
+              <span class="text-[9px] text-outline truncate" id="carteira-count-a-pagar">0 pendentes</span>
             </div>
-            <div class="bg-surface-container-lowest p-3 rounded-2xl border border-outline-variant/30 flex flex-col shadow-xs">
-              <span class="font-label-sm text-[10px] text-on-surface-variant uppercase font-semibold">Próx. Vencimento</span>
-              <span class="font-label-lg font-bold text-on-surface text-sm mt-0.5 truncate" id="carteira-prox-vencimento">Nenhum</span>
-              <span class="text-[10px] text-tertiary truncate" id="carteira-prox-dias">-</span>
+            <div class="bg-surface-container-lowest p-2 sm:p-3 rounded-2xl border border-outline-variant/30 flex flex-col shadow-xs overflow-hidden">
+              <span class="font-label-sm text-[9px] text-on-surface-variant uppercase font-semibold whitespace-nowrap truncate">Vencimento</span>
+              <span class="font-label-lg font-bold text-on-surface text-xs sm:text-sm mt-0.5 truncate" id="carteira-prox-vencimento">Nenhum</span>
+              <span class="text-[9px] text-tertiary truncate" id="carteira-prox-dias">-</span>
             </div>
-            <div class="bg-surface-container-lowest p-3 rounded-2xl border border-outline-variant/30 flex flex-col shadow-xs">
-              <span class="font-label-sm text-[10px] text-on-surface-variant uppercase font-semibold">A Receber</span>
-              <span class="font-label-lg font-bold text-secondary text-sm mt-0.5 truncate" id="carteira-sum-areceber">R$ 0,00</span>
-              <span class="text-[10px] text-outline truncate">Previsão</span>
+            <div class="bg-surface-container-lowest p-2 sm:p-3 rounded-2xl border border-outline-variant/30 flex flex-col shadow-xs overflow-hidden">
+              <span class="font-label-sm text-[9px] text-on-surface-variant uppercase font-semibold whitespace-nowrap truncate">A Receber</span>
+              <span class="font-label-lg font-bold text-secondary text-xs sm:text-sm mt-0.5 truncate" id="carteira-sum-areceber">R$ 0,00</span>
+              <span class="text-[9px] text-outline truncate">Previsão</span>
             </div>
           </div>
 
           <!-- Abas de Navegação Financeira -->
-          <div class="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs font-semibold">
-            <button type="button" class="tab-btn px-3 py-2 rounded-xl transition-all ${this.currentFilter.tab === 'all' ? 'bg-primary text-on-primary shadow-xs' : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container'}" data-tab="all">
+          <div class="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-[11px] font-semibold snap-x">
+            <button type="button" class="tab-btn px-3 py-1.5 shrink-0 rounded-xl transition-all whitespace-nowrap snap-start ${this.currentFilter.tab === 'all' ? 'bg-primary text-on-primary shadow-xs' : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container'}" data-tab="all">
               Todos
             </button>
-            <button type="button" class="tab-btn px-3 py-2 rounded-xl transition-all ${this.currentFilter.tab === 'a_pagar' ? 'bg-error text-on-error shadow-xs' : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container'}" data-tab="a_pagar">
+            <button type="button" class="tab-btn px-3 py-1.5 shrink-0 rounded-xl transition-all whitespace-nowrap snap-start ${this.currentFilter.tab === 'a_pagar' ? 'bg-error text-on-error shadow-xs' : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container'}" data-tab="a_pagar">
               ⏰ A Pagar
             </button>
-            <button type="button" class="tab-btn px-3 py-2 rounded-xl transition-all ${this.currentFilter.tab === 'despesas' ? 'bg-primary text-on-primary shadow-xs' : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container'}" data-tab="despesas">
+            <button type="button" class="tab-btn px-3 py-1.5 shrink-0 rounded-xl transition-all whitespace-nowrap snap-start ${this.currentFilter.tab === 'despesas' ? 'bg-primary text-on-primary shadow-xs' : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container'}" data-tab="despesas">
               🔴 Despesas
             </button>
-            <button type="button" class="tab-btn px-3 py-2 rounded-xl transition-all ${this.currentFilter.tab === 'entradas' ? 'bg-primary text-on-primary shadow-xs' : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container'}" data-tab="entradas">
+            <button type="button" class="tab-btn px-3 py-1.5 shrink-0 rounded-xl transition-all whitespace-nowrap snap-start ${this.currentFilter.tab === 'entradas' ? 'bg-primary text-on-primary shadow-xs' : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container'}" data-tab="entradas">
               🟢 Entradas
             </button>
-            <button type="button" class="tab-btn px-3 py-2 rounded-xl transition-all ${this.currentFilter.tab === 'parcelados' ? 'bg-primary text-on-primary shadow-xs' : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container'}" data-tab="parcelados">
+            <button type="button" class="tab-btn px-3 py-1.5 shrink-0 rounded-xl transition-all whitespace-nowrap snap-start ${this.currentFilter.tab === 'parcelados' ? 'bg-primary text-on-primary shadow-xs' : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container'}" data-tab="parcelados">
               💳 Parcelados
             </button>
-            <button type="button" class="tab-btn px-3 py-2 rounded-xl transition-all ${this.currentFilter.tab === 'recorrentes' ? 'bg-primary text-on-primary shadow-xs' : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container'}" data-tab="recorrentes">
+            <button type="button" class="tab-btn px-3 py-1.5 shrink-0 rounded-xl transition-all whitespace-nowrap snap-start ${this.currentFilter.tab === 'recorrentes' ? 'bg-primary text-on-primary shadow-xs' : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container'}" data-tab="recorrentes">
               🔁 Recorrentes
             </button>
           </div>
