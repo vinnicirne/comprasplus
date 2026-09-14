@@ -537,4 +537,50 @@ begin
 end;
 $$ language plpgsql security definer set search_path = public;
 
+-- 16. Expansão Financeira (Despesas, Parcelamento, Contas a Pagar & Recorrência) e Autoria
+alter table public.carteira_entradas add column if not exists type text not null default 'entrada';
+alter table public.carteira_entradas add column if not exists status text not null default 'recebido';
+alter table public.carteira_entradas add column if not exists due_date date;
+alter table public.carteira_entradas add column if not exists paid_at timestamptz;
+alter table public.carteira_entradas add column if not exists is_recurrent boolean default false;
+alter table public.carteira_entradas add column if not exists recurrent_period text default 'mensal';
+alter table public.carteira_entradas add column if not exists is_installment boolean default false;
+alter table public.carteira_entradas add column if not exists installment_current integer;
+alter table public.carteira_entradas add column if not exists installment_total integer;
+alter table public.carteira_entradas add column if not exists parent_id text;
+alter table public.carteira_entradas add column if not exists category text;
+alter table public.carteira_entradas add column if not exists related_list_id text;
+
+-- Autoria em listas
+alter table public.listas add column if not exists owner_id uuid;
+alter table public.listas add column if not exists owner_name text;
+alter table public.listas add column if not exists owner_email text;
+
+-- ==========================================================
+-- 17. Tabela Global de Produtos (Pré-Lista / Autocomplete)
+-- ==========================================================
+create table if not exists public.produtos (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- (Opcional) Índice único case-insensitive extra, se necessário, mas a constraint unique acima já cobre o onConflict
+create unique index if not exists idx_produtos_name_lower on public.produtos(lower(trim(name)));
+
+alter table public.produtos enable row level security;
+
+-- Política de leitura global: qualquer pessoa (mesmo anônimo, dependendo da config) pode ler para autocomplete.
+-- Porém, vamos restringir para usuários autenticados para mais segurança ou deixar liberado para todos visualizarem as sugestões.
+drop policy if exists "Leitura global de produtos" on public.produtos;
+create policy "Leitura global de produtos" 
+  on public.produtos for select 
+  using (true);
+
+-- Política de inserção: qualquer usuário autenticado pode cadastrar um novo produto implicitamente.
+drop policy if exists "Inserção de produtos autenticada" on public.produtos;
+create policy "Inserção de produtos autenticada" 
+  on public.produtos for insert 
+  with check (auth.uid() is not null);
 

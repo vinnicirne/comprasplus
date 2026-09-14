@@ -36,7 +36,8 @@ export async function getListas(userId) {
 }
 
 const VALID_SUPABASE_COLUMNS = [
-  'id', 'name', 'category', 'budget', 'items', 'created_at', 'user_id', 'date', 'status', 'concluida_at', 'store'
+  'id', 'name', 'category', 'budget', 'items', 'created_at', 'user_id', 'date', 'status', 'concluida_at', 'store',
+  'owner_id', 'owner_name', 'owner_email'
 ];
 
 function sanitizePayload(obj) {
@@ -52,6 +53,9 @@ function sanitizePayload(obj) {
 export async function createLista(listaData) {
   const fullData = {
     id: listaData.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'lista_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9)),
+    owner_id: listaData.owner_id || listaData.user_id,
+    owner_name: listaData.owner_name || null,
+    owner_email: listaData.owner_email || null,
     ...listaData
   };
   const payload = sanitizePayload(fullData);
@@ -71,9 +75,13 @@ export async function createLista(listaData) {
     error = err;
   }
 
-  // Se falhou por causa da coluna 'store' não existir ainda no Supabase
-  if (error && payload.store !== undefined && (error.message?.includes('store') || error.code === 'PGRST204')) {
-    const { store: _, ...fallbackPayload } = payload;
+  // Fallback se colunas recentes (store, owner_id, owner_name, owner_email) não existirem ainda no schema do Supabase
+  if (error && (error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('store') || error.message?.includes('owner'))) {
+    const fallbackPayload = { ...payload };
+    delete fallbackPayload.store;
+    delete fallbackPayload.owner_id;
+    delete fallbackPayload.owner_name;
+    delete fallbackPayload.owner_email;
     try {
       const res2 = await supabase
         .from('listas')
@@ -89,7 +97,7 @@ export async function createLista(listaData) {
 
   if (error) throw new Error(error.message || 'Erro ao criar lista no banco de dados');
   
-  // Also save to localIndexedDb (preserving fullData with store)
+  // Also save to localIndexedDb (preserving fullData)
   try {
     const storeObj = await getStore('listas', 'readwrite');
     storeObj.put({ ...fullData, ...(data || {}) });
@@ -160,9 +168,13 @@ export async function updateLista(id, updates) {
         .select()
         .single();
 
-      // Se falhou por causa da coluna 'store' não existir ainda no Supabase
-      if (error && payload.store !== undefined && (error.message?.includes('store') || error.code === 'PGRST204')) {
-        const { store: _, ...fallbackPayload } = payload;
+      // Fallback para colunas que ainda não existam no Supabase
+      if (error && (error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('store') || error.message?.includes('owner'))) {
+        const fallbackPayload = { ...payload };
+        delete fallbackPayload.store;
+        delete fallbackPayload.owner_id;
+        delete fallbackPayload.owner_name;
+        delete fallbackPayload.owner_email;
         const res2 = await supabase
           .from('listas')
           .update(fallbackPayload)

@@ -5,7 +5,7 @@ import { savePurchaseHistory } from '../services/historyService.js';
 import * as shareService from '../services/shareService.js';
 import { formatCurrency, formatDateBR, escapeHtml } from '../utils/formatters.js';
 import { showToast } from '../utils/toast.js';
-
+import { productService } from '../services/productService.js';
 export const CATEGORY_ICONS = {
   'Mercado': 'shopping_cart',
   'Mercearia': 'storefront',
@@ -97,10 +97,18 @@ export const ListDetailView = {
             </button>
             <div class="flex flex-col min-w-0">
               <h1 class="font-headline-sm font-bold text-on-surface truncate max-w-[170px] sm:max-w-xs" id="detalhe-nome-header">${escapeHtml(this.currentList.name || 'Lista')}</h1>
-              <span class="font-label-sm text-on-surface-variant flex items-center gap-1 truncate ${this.currentList.store ? '' : 'hidden'}" id="detalhe-store-header">
-                <span class="material-symbols-outlined text-[12px] text-primary">storefront</span>
-                <span id="detalhe-store-text">${escapeHtml(this.currentList.store || '')}</span>
-              </span>
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="font-label-sm text-on-surface-variant flex items-center gap-1 truncate ${this.currentList.store ? '' : 'hidden'}" id="detalhe-store-header">
+                  <span class="material-symbols-outlined text-[12px] text-primary">storefront</span>
+                  <span id="detalhe-store-text">${escapeHtml(this.currentList.store || '')}</span>
+                </span>
+                ${(this.currentList.owner_name && appStore.state.currentUser && this.currentList.owner_id && this.currentList.owner_id !== appStore.state.currentUser.id) ? `
+                  <span class="font-label-sm text-primary font-medium flex items-center gap-0.5 bg-primary/10 px-2 py-0.5 rounded-full text-[11px]" title="Criador da lista">
+                    <span class="material-symbols-outlined text-[12px]">person</span>
+                    <span>Criada por: ${escapeHtml(this.currentList.owner_name)}</span>
+                  </span>
+                ` : ''}
+              </div>
             </div>
           </div>
           <div class="flex items-center gap-1 shrink-0">
@@ -185,11 +193,13 @@ export const ListDetailView = {
             </div>
             
             <form id="form-add-item" class="flex flex-col gap-3 pb-2">
-              <div class="flex flex-col gap-1">
+              <div class="flex flex-col gap-1 relative">
                 <label class="text-xs font-semibold text-on-surface-variant uppercase tracking-wider" for="item-name">Nome do Produto *</label>
                 <div class="flex items-center bg-surface-container-low rounded-xl border border-outline-variant/40 focus-within:border-primary focus-within:ring-1 focus-within:ring-primary transition-all h-11 px-3">
                   <input id="item-name" type="text" class="w-full h-full bg-transparent outline-none text-sm text-on-surface font-semibold placeholder:text-outline/60 placeholder:font-normal" placeholder="Ex: Arroz 5kg" required autocomplete="off">
                 </div>
+                <!-- Autocomplete Dropdown -->
+                <div id="autocomplete-suggestions" class="hidden absolute top-[105%] left-0 right-0 bg-surface border border-outline-variant/40 rounded-xl shadow-[0_12px_28px_rgba(0,105,72,0.12)] z-[60] overflow-y-auto max-h-[160px] flex-col py-1"></div>
               </div>
 
               <div class="grid grid-cols-2 gap-2.5">
@@ -492,71 +502,118 @@ export const ListDetailView = {
       return;
     }
 
-    // Ordena: itens não marcados primeiro (mais recentes no topo), depois comprados
-    const sortedItems = [...items].sort((a, b) => {
-      if (Boolean(a.checked) === Boolean(b.checked)) {
-        const timeA = new Date(a.createdAt || 0).getTime();
-        const timeB = new Date(b.createdAt || 0).getTime();
-        return timeB - timeA;
-      }
-      return a.checked ? 1 : -1;
+    // Agrupar itens por categoria
+    const groupedItems = {};
+    items.forEach(item => {
+      const cat = item.category || 'Outros';
+      if (!groupedItems[cat]) groupedItems[cat] = [];
+      groupedItems[cat].push(item);
     });
 
-    const html = `
-      <div class="product-items-container">
-        ${sortedItems.map(item => {
-          const isChecked = Boolean(item.checked);
-          const itemName = item.name || item.nome || 'Item sem nome';
-          const itemPrice = item.price !== undefined ? Number(item.price) : (Number(item.preco) || 0);
-          const itemQty = item.quantity !== undefined ? Number(item.quantity) : (Number(item.quantidade) || 1);
-          const itemUnit = item.unit || item.unidade || 'un';
-          
-          const total = this.calculateItemTotal(itemPrice, itemQty, itemUnit);
-          
-          return `
-            <article class="mobile-product-card ${isChecked ? 'item-comprado' : ''}" data-id="${item.id}">
-              <div class="product-left-col">
-                <button type="button" class="btn-toggle-check w-6 h-6 rounded-lg ${isChecked ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-transparent hover:bg-surface-container-highest border border-outline-variant/60'} flex items-center justify-center shrink-0 transition-all cursor-pointer shadow-xs active:scale-90" data-id="${item.id}" title="${isChecked ? 'Desmarcar' : 'Marcar como comprado'}">
-                  <span class="material-symbols-outlined text-[18px]">check</span>
-                </button>
-                
-                <div class="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
-                  <span class="product-name ${isChecked ? 'line-through text-outline' : 'text-on-surface'} cursor-pointer btn-edit-trigger truncate" data-id="${item.id}" title="Toque para editar">
-                    ${escapeHtml(itemName)}
-                  </span>
+    // Ordenar itens dentro de cada categoria (não comprados primeiro)
+    for (const cat in groupedItems) {
+      groupedItems[cat].sort((a, b) => {
+        if (Boolean(a.checked) === Boolean(b.checked)) {
+          const timeA = new Date(a.createdAt || 0).getTime();
+          const timeB = new Date(b.createdAt || 0).getTime();
+          return timeB - timeA;
+        }
+        return a.checked ? 1 : -1;
+      });
+    }
+
+    // Ordenar categorias (Outros sempre no final)
+    const categories = Object.keys(groupedItems).sort((a, b) => {
+      if (a === 'Outros') return 1;
+      if (b === 'Outros') return -1;
+      return a.localeCompare(b);
+    });
+
+    let html = '';
+
+    categories.forEach(cat => {
+      const iconName = CATEGORY_ICONS[cat] || 'category';
+      html += `
+        <div class="mt-5 mb-2 flex items-center gap-2 first:mt-1 px-1">
+          <span class="material-symbols-outlined text-[16px] text-primary/80">${iconName}</span>
+          <h3 class="font-bold text-xs text-on-surface-variant uppercase tracking-wider">${escapeHtml(cat)}</h3>
+          <div class="h-px bg-outline-variant/30 flex-1 ml-2"></div>
+        </div>
+        <div class="product-items-container flex flex-col gap-2.5">
+          ${groupedItems[cat].map(item => {
+            const isChecked = Boolean(item.checked);
+            const itemName = item.name || item.nome || 'Item sem nome';
+            const itemPrice = item.price !== undefined ? Number(item.price) : (Number(item.preco) || 0);
+            const itemQty = item.quantity !== undefined ? Number(item.quantity) : (Number(item.quantidade) || 1);
+            const itemUnit = item.unit || item.unidade || 'un';
+            const total = this.calculateItemTotal(itemPrice, itemQty, itemUnit);
+            
+            const addedName = item.added_by_name || item.addedBy || null;
+            const checkedName = item.checked_by_name || item.checkedBy || null;
+            
+            return `
+              <article class="mobile-product-card ${isChecked ? 'item-comprado' : ''}" data-id="${item.id}">
+                <div class="product-left-col">
+                  <button type="button" class="btn-toggle-check w-6 h-6 rounded-lg ${isChecked ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-transparent hover:bg-surface-container-highest border border-outline-variant/60'} flex items-center justify-center shrink-0 transition-all cursor-pointer shadow-xs active:scale-90" data-id="${item.id}" title="${isChecked ? 'Desmarcar' : 'Marcar como comprado'}">
+                    <span class="material-symbols-outlined text-[18px]">check</span>
+                  </button>
                   
-                  <!-- Unidade e Quantidade AO LADO do produto -->
-                  <div class="product-qty-control shrink-0" onclick="event.stopPropagation()">
-                    <button type="button" class="product-qty-btn btn-qty-minus" data-id="${item.id}" title="Diminuir quantidade">−</button>
-                    <span class="text-xs font-bold text-on-surface">${itemQty} ${itemUnit}</span>
-                    <button type="button" class="product-qty-btn btn-qty-plus" data-id="${item.id}" title="Aumentar quantidade">+</button>
+                  <div class="flex flex-col flex-1 min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <span class="product-name ${isChecked ? 'line-through text-outline' : 'text-on-surface'} cursor-pointer btn-edit-trigger truncate" data-id="${item.id}" title="Toque para editar">
+                        ${escapeHtml(itemName)}
+                      </span>
+                      
+                      <!-- Unidade e Quantidade AO LADO do produto -->
+                      <div class="product-qty-control shrink-0" onclick="event.stopPropagation()">
+                        <button type="button" class="product-qty-btn btn-qty-minus" data-id="${item.id}" title="Diminuir quantidade">−</button>
+                        <span class="text-xs font-bold text-on-surface">${itemQty} ${itemUnit}</span>
+                        <button type="button" class="product-qty-btn btn-qty-plus" data-id="${item.id}" title="Aumentar quantidade">+</button>
+                      </div>
+                    </div>
+
+                    <!-- Badges de autoria discretos e elegantes -->
+                    ${(addedName || (isChecked && checkedName)) ? `
+                      <div class="flex items-center gap-1.5 flex-wrap mt-1">
+                        ${addedName ? `
+                          <span class="inline-flex items-center gap-0.5 text-[10px] font-medium text-on-surface-variant/80 bg-surface-container-high/60 px-1.5 py-0.5 rounded" title="Adicionado por ${escapeHtml(addedName)}">
+                            + ${escapeHtml(addedName)}
+                          </span>
+                        ` : ''}
+                        ${(isChecked && checkedName) ? `
+                          <span class="inline-flex items-center gap-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded" title="Comprado por ${escapeHtml(checkedName)}">
+                            ✓ ${escapeHtml(checkedName)}
+                          </span>
+                        ` : ''}
+                      </div>
+                    ` : ''}
                   </div>
                 </div>
-              </div>
 
-              <!-- Preço na lateral direita (não abaixo) + Editar + Excluir -->
-              <div class="product-right-col shrink-0 flex items-center gap-1.5">
-                ${total <= 0 ? `
-                  <button type="button" class="btn-item-price-chip sem-preco btn-edit-trigger" data-id="${item.id}" title="Toque para colocar o preço">
-                    🏷️ Colocar Preço
+                <!-- Preço na lateral direita (não abaixo) + Editar + Excluir -->
+                <div class="product-right-col shrink-0 flex items-center gap-1.5">
+                  ${total <= 0 ? `
+                    <button type="button" class="btn-item-price-chip sem-preco btn-edit-trigger" data-id="${item.id}" title="Toque para colocar o preço">
+                      🏷️ Colocar Preço
+                    </button>
+                  ` : `
+                    <button type="button" class="btn-item-price-chip com-preco btn-edit-trigger" data-id="${item.id}" title="${itemQty > 1 ? `${itemQty} ${itemUnit} × ${formatCurrency(itemPrice)}` : 'Toque para alterar o preço'}">
+                      ${formatCurrency(total)}
+                    </button>
+                  `}
+                  <button type="button" class="btn-item-edit btn-edit-trigger" data-id="${item.id}" title="Editar produto">
+                    <span class="material-symbols-outlined text-[18px]">edit</span>
                   </button>
-                ` : `
-                  <button type="button" class="btn-item-price-chip com-preco btn-edit-trigger" data-id="${item.id}" title="${itemQty > 1 ? `${itemQty} ${itemUnit} × ${formatCurrency(itemPrice)}` : 'Toque para alterar o preço'}">
-                    ${formatCurrency(total)}
+                  <button type="button" class="btn-item-trash" data-id="${item.id}" title="Excluir este item">
+                    <span class="material-symbols-outlined text-[18px]">delete</span>
                   </button>
-                `}
-                <button type="button" class="btn-item-edit btn-edit-trigger" data-id="${item.id}" title="Editar produto">
-                  <span class="material-symbols-outlined text-[18px]">edit</span>
-                </button>
-                <button type="button" class="btn-item-trash" data-id="${item.id}" title="Excluir este item">
-                  <span class="material-symbols-outlined text-[18px]">delete</span>
-                </button>
-              </div>
-            </article>
-          `;
-        }).join('')}
-      </div>
-    `;
+                </div>
+              </article>
+            `;
+          }).join('')}
+        </div>
+      `;
+    });
 
     container.innerHTML = html;
 
@@ -636,6 +693,22 @@ export const ListDetailView = {
     const item = this.currentList.items.find(i => i.id === itemId);
     if (item) {
       item.checked = !item.checked;
+      
+      const currentUser = appStore.state.currentUser;
+      const currentUserName = currentUser?.user_metadata?.full_name || currentUser?.email?.split('@')[0] || 'Usuário';
+      const currentUserId = currentUser?.id || null;
+
+      if (item.checked) {
+        item.checked_by = currentUserId;
+        item.checked_by_name = currentUserName;
+        item.checked_at = new Date().toISOString();
+        item.checkedBy = currentUserName;
+      } else {
+        item.checked_by = null;
+        item.checked_by_name = null;
+        item.checked_at = null;
+        delete item.checkedBy;
+      }
       
       this.updateHeroStats();
       this.renderItems();
@@ -1034,6 +1107,53 @@ export const ListDetailView = {
     const btnCloseX = document.getElementById('btn-fechar-item-modal-x');
     const form = document.getElementById('form-add-item');
 
+    // Autocomplete Lógica
+    const inputName = document.getElementById('item-name');
+    const suggestionsBox = document.getElementById('autocomplete-suggestions');
+    let debounceTimer;
+
+    inputName?.addEventListener('input', (e) => {
+      const val = e.target.value.trim();
+      if (val.length < 2) {
+        suggestionsBox.classList.add('hidden');
+        suggestionsBox.classList.remove('flex');
+        return;
+      }
+
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(async () => {
+        const results = await productService.searchProducts(val);
+        if (results && results.length > 0) {
+          suggestionsBox.innerHTML = results.map(r => 
+            `<button type="button" class="autocomplete-item w-full text-left px-4 py-2.5 text-sm font-semibold text-on-surface hover:bg-surface-container-low active:bg-surface-container transition-colors border-b border-outline-variant/20 last:border-0 flex items-center gap-2">
+              <span class="material-symbols-outlined text-[16px] text-primary/70">search</span> ${escapeHtml(r.name)}
+             </button>`
+          ).join('');
+          suggestionsBox.classList.remove('hidden');
+          suggestionsBox.classList.add('flex');
+          
+          suggestionsBox.querySelectorAll('.autocomplete-item').forEach(btn => {
+            btn.addEventListener('click', () => {
+              inputName.value = btn.textContent.trim();
+              suggestionsBox.classList.add('hidden');
+              suggestionsBox.classList.remove('flex');
+            });
+          });
+        } else {
+          suggestionsBox.classList.add('hidden');
+          suggestionsBox.classList.remove('flex');
+        }
+      }, 300);
+    });
+
+    // Fechar autocomplete ao clicar fora ou focar em outro input
+    document.addEventListener('click', (e) => {
+      if (inputName && suggestionsBox && !inputName.contains(e.target) && !suggestionsBox.contains(e.target)) {
+        suggestionsBox.classList.add('hidden');
+        suggestionsBox.classList.remove('flex');
+      }
+    });
+
     fab?.addEventListener('click', () => this.openAddModal());
     overlay?.addEventListener('click', () => this.hideModal());
     btnCancel?.addEventListener('click', () => this.hideModal());
@@ -1051,6 +1171,9 @@ export const ListDetailView = {
 
       if (!name) return;
 
+      // Cadastro global e silencioso do novo produto
+      productService.registerProduct(name);
+
       if (this.editingItemId) {
         const item = this.currentList.items.find(i => i.id === this.editingItemId);
         if (item) {
@@ -1061,6 +1184,10 @@ export const ListDetailView = {
           item.category = category;
         }
       } else {
+        const currentUser = appStore.state.currentUser;
+        const currentUserName = currentUser?.user_metadata?.full_name || currentUser?.email?.split('@')[0] || 'Usuário';
+        const currentUserId = currentUser?.id || null;
+
         const newItem = {
           id: 'item_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now(),
           name,
@@ -1069,7 +1196,10 @@ export const ListDetailView = {
           unit,
           category,
           checked: false,
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
+          added_by: currentUserId,
+          added_by_name: currentUserName,
+          addedBy: currentUserName
         };
         this.currentList.items.push(newItem);
       }

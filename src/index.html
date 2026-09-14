@@ -35,27 +35,27 @@
         </div>
       </header>
 
-      <nav class="fixed bottom-0 inset-x-0 z-50 pb-safe bg-surface/90 backdrop-blur-xl shadow-[0_-4px_20px_rgba(0,105,72,0.06)]" id="app-main-nav">
-        <div class="flex justify-around items-center h-16 px-space-xs max-w-lg mx-auto">
-          <button type="button" class="app-nav-tab active flex flex-col items-center justify-center min-w-[56px] h-12 px-1 transition-all gap-0.5 text-primary font-label-md bg-primary-fixed/30 rounded-full cursor-pointer" id="tab-nav-listas" data-target="/dashboard">
+      <nav id="app-main-nav">
+        <div class="app-nav-container flex justify-around items-center h-[72px] pb-1 px-1 max-w-lg mx-auto">
+          <button type="button" class="app-nav-tab active flex flex-col items-center justify-center flex-1 max-w-[72px] min-w-0 h-14 px-1 transition-all gap-0.5 text-primary font-label-md rounded-full cursor-pointer" id="tab-nav-listas" data-target="/dashboard">
             <span class="material-symbols-outlined text-[20px]">checklist</span>
-            <span class="font-label-sm text-[11px] leading-tight font-semibold">Listas</span>
+            <span class="font-label-sm text-[11px] leading-tight font-semibold truncate w-full text-center">Listas</span>
           </button>
-          <button type="button" class="app-nav-tab flex flex-col items-center justify-center min-w-[56px] h-12 px-1 text-on-surface-variant hover:text-primary hover:bg-surface-container-high rounded-full transition-all gap-0.5 cursor-pointer" id="tab-nav-carteira" data-target="/carteira">
+          <button type="button" class="app-nav-tab flex flex-col items-center justify-center flex-1 max-w-[72px] min-w-0 h-14 px-1 text-on-surface-variant hover:text-primary rounded-full transition-all gap-0.5 cursor-pointer" id="tab-nav-carteira" data-target="/carteira">
             <span class="material-symbols-outlined text-[20px]">account_balance_wallet</span>
-            <span class="font-label-sm text-[11px] leading-tight font-semibold">Carteira</span>
+            <span class="font-label-sm text-[11px] leading-tight font-semibold truncate w-full text-center">Carteira</span>
           </button>
-          <button type="button" class="app-nav-tab flex flex-col items-center justify-center min-w-[56px] h-12 px-1 text-on-surface-variant hover:text-primary hover:bg-surface-container-high rounded-full transition-all gap-0.5 cursor-pointer" id="tab-nav-historico" data-target="/historico">
+          <button type="button" class="app-nav-tab flex flex-col items-center justify-center flex-1 max-w-[72px] min-w-0 h-14 px-1 text-on-surface-variant hover:text-primary rounded-full transition-all gap-0.5 cursor-pointer" id="tab-nav-historico" data-target="/historico">
             <span class="material-symbols-outlined text-[20px]">receipt_long</span>
-            <span class="font-label-sm text-[11px] leading-tight font-semibold">Histórico</span>
+            <span class="font-label-sm text-[11px] leading-tight font-semibold truncate w-full text-center">Histórico</span>
           </button>
-          <button type="button" class="app-nav-tab flex flex-col items-center justify-center min-w-[56px] h-12 px-1 text-on-surface-variant hover:text-primary hover:bg-surface-container-high rounded-full transition-all gap-0.5 cursor-pointer" id="tab-nav-perfil" data-target="/perfil">
+          <button type="button" class="app-nav-tab flex flex-col items-center justify-center flex-1 max-w-[72px] min-w-0 h-14 px-1 text-on-surface-variant hover:text-primary rounded-full transition-all gap-0.5 cursor-pointer" id="tab-nav-perfil" data-target="/perfil">
             <span class="material-symbols-outlined text-[20px]">person</span>
-            <span class="font-label-sm text-[11px] leading-tight font-semibold">Perfil</span>
+            <span class="font-label-sm text-[11px] leading-tight font-semibold truncate w-full text-center">Perfil</span>
           </button>
-          <button type="button" class="app-nav-tab hidden flex flex-col items-center justify-center min-w-[56px] h-12 px-1 text-on-surface-variant hover:text-primary hover:bg-surface-container-high rounded-full transition-all gap-0.5 cursor-pointer" id="tab-nav-admin" data-target="/admin">
+          <button type="button" class="app-nav-tab hidden flex flex-col items-center justify-center flex-1 max-w-[72px] min-w-0 h-14 px-1 text-on-surface-variant hover:text-primary rounded-full transition-all gap-0.5 cursor-pointer" id="tab-nav-admin" data-target="/admin">
             <span class="material-symbols-outlined text-[20px]">shield_person</span>
-            <span class="font-label-sm text-[11px] leading-tight font-semibold">Admin</span>
+            <span class="font-label-sm text-[11px] leading-tight font-semibold truncate w-full text-center">Admin</span>
           </button>
         </div>
       </nav>

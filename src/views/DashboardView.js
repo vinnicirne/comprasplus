@@ -9,7 +9,7 @@ import { showToast } from '../utils/toast.js';
 export const DashboardView = {
   async render() {
     const app = document.getElementById('app');
-    
+
     // Mostra skeleton loader se quisermos depois, por agora só carrega
     const user = appStore.state.currentUser;
     if (!user) {
@@ -27,10 +27,10 @@ export const DashboardView = {
 
     const routerView = document.getElementById('router-view');
     routerView.innerHTML = this.getBaseHtml();
-    
+
     // Seta o nome do usuário
     this.updateGreeting(user);
-    
+
     // Anexa eventos estáticos (ex: nova lista)
     this.attachStaticEvents();
 
@@ -54,7 +54,7 @@ export const DashboardView = {
           appStore.state.lists = freshLists;
           this.renderLists(freshLists);
           this.updateWalletSummary();
-        } catch (_) {}
+        } catch (_) { }
       });
     }
 
@@ -83,7 +83,7 @@ export const DashboardView = {
     if (btnAuth && !btnAuth.dataset.bound) {
       btnAuth.dataset.bound = '1';
       btnAuth.addEventListener('click', () => {
-        import('page').then(m => m.default('/perfil')).catch(() => {});
+        import('page').then(m => m.default('/perfil')).catch(() => { });
       });
     }
   },
@@ -97,9 +97,11 @@ export const DashboardView = {
       ]);
       const balance = calculateWalletBalance(entries, purchases);
       const elSaldo = document.getElementById('dashboard-wallet-balance');
+      const elContas = document.getElementById('dashboard-contas-a-pagar');
+
       if (elSaldo) {
-        elSaldo.textContent = formatCurrency(balance.saldoGeralCarteira);
-        if (balance.saldoGeralCarteira < 0) {
+        elSaldo.textContent = formatCurrency(balance.saldoEmCaixa);
+        if (balance.saldoEmCaixa < 0) {
           elSaldo.classList.add('text-error');
           elSaldo.classList.remove('text-secondary-fixed');
         } else {
@@ -107,7 +109,17 @@ export const DashboardView = {
           elSaldo.classList.add('text-secondary-fixed');
         }
       }
-    } catch (_) {}
+
+      if (elContas) {
+        if (balance.totalGeralContasAPagar > 0) {
+          elContas.textContent = `A pagar: ${formatCurrency(balance.totalGeralContasAPagar)} (${balance.contasAPagarList.length})`;
+          elContas.className = 'text-rose-200 font-semibold';
+        } else {
+          elContas.textContent = 'Contas em dia ✓';
+          elContas.className = 'text-emerald-200 font-semibold';
+        }
+      }
+    } catch (_) { }
   },
 
 
@@ -137,7 +149,7 @@ export const DashboardView = {
       if (urlParams.get('action') === 'new' || hash.includes('action=new')) {
         this.openNovaListaModal();
       }
-    } catch (_) {}
+    } catch (_) { }
 
     // Atalho da Carteira no Dashboard
     const btnCarteira = document.getElementById('btn-dashboard-ir-carteira');
@@ -148,7 +160,7 @@ export const DashboardView = {
         page('/carteira');
       });
     }
-    
+
     // Adicionar listener aos botões de filtro
     const filterBtns = document.querySelectorAll('.dashboard-filter-btn');
     filterBtns.forEach(btn => {
@@ -157,11 +169,11 @@ export const DashboardView = {
           b.classList.remove('bg-primary', 'text-on-primary', 'shadow-md', 'hover:brightness-105');
           b.classList.add('bg-surface-container', 'text-on-surface-variant', 'hover:bg-surface-container-high', 'hover:text-on-surface');
         });
-        
+
         const clicked = e.currentTarget;
         clicked.classList.remove('bg-surface-container', 'text-on-surface-variant', 'hover:bg-surface-container-high', 'hover:text-on-surface');
         clicked.classList.add('bg-primary', 'text-on-primary', 'shadow-md', 'hover:brightness-105');
-        
+
         appStore.state.filterCategory = clicked.dataset.filter || 'TODAS';
         this.renderLists(appStore.state.lists);
       });
@@ -358,12 +370,12 @@ export const DashboardView = {
             <label class="font-label-sm text-on-surface-variant text-xs font-semibold uppercase tracking-wide">Categoria</label>
             <div class="flex flex-wrap gap-2">
               ${[
-                {value:'mercado', icon:'shopping_cart', label:'Mercado'},
-                {value:'hortifruti', icon:'nutrition', label:'Hortifruti'},
-                {value:'farmacia', icon:'medical_services', label:'Farmácia'},
-                {value:'festa', icon:'celebration', label:'Festa'},
-                {value:'outros', icon:'category', label:'Outros'},
-              ].map(c => `
+        { value: 'mercado', icon: 'shopping_cart', label: 'Mercado' },
+        { value: 'hortifruti', icon: 'nutrition', label: 'Hortifruti' },
+        { value: 'farmacia', icon: 'medical_services', label: 'Farmácia' },
+        { value: 'festa', icon: 'celebration', label: 'Festa' },
+        { value: 'outros', icon: 'category', label: 'Outros' },
+      ].map(c => `
                 <button type="button" class="categoria-btn flex items-center gap-1.5 h-8 px-3 rounded-full border border-outline-variant/40 bg-surface-container text-on-surface-variant text-xs font-semibold transition-all hover:border-primary hover:text-primary active:scale-95" data-value="${c.value}">
                   <span class="material-symbols-outlined text-[14px]">${c.icon}</span>
                   ${c.label}
@@ -444,12 +456,16 @@ export const DashboardView = {
       try {
         const user = appStore.state.currentUser;
         const { createLista } = await import('../services/listService.js');
+        const ownerName = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'Eu';
         await createLista({
           name: nome,
           store: loja,
           category: selectedCategoria,
           budget: orcamento,
           user_id: user.id,
+          owner_id: user.id,
+          owner_name: ownerName,
+          owner_email: user.email || null,
           items: [],
           status: 'aberta'
         });
@@ -511,20 +527,20 @@ export const DashboardView = {
             <label class="font-label-sm text-on-surface-variant text-xs font-semibold uppercase tracking-wide">Categoria</label>
             <div class="flex flex-wrap gap-2">
               ${[
-                {value:'mercado', icon:'shopping_cart', label:'Mercado'},
-                {value:'hortifruti', icon:'nutrition', label:'Hortifruti'},
-                {value:'farmacia', icon:'medical_services', label:'Farmácia'},
-                {value:'festa', icon:'celebration', label:'Festa'},
-                {value:'outros', icon:'category', label:'Outros'},
-              ].map(c => {
-                const isActive = currentCat === c.value;
-                return `
+        { value: 'mercado', icon: 'shopping_cart', label: 'Mercado' },
+        { value: 'hortifruti', icon: 'nutrition', label: 'Hortifruti' },
+        { value: 'farmacia', icon: 'medical_services', label: 'Farmácia' },
+        { value: 'festa', icon: 'celebration', label: 'Festa' },
+        { value: 'outros', icon: 'category', label: 'Outros' },
+      ].map(c => {
+        const isActive = currentCat === c.value;
+        return `
                   <button type="button" class="editar-categoria-btn flex items-center gap-1.5 h-8 px-3 rounded-full border ${isActive ? 'border-primary text-primary bg-primary-fixed/30 font-bold' : 'border-outline-variant/40 bg-surface-container text-on-surface-variant font-semibold'} text-xs transition-all hover:border-primary hover:text-primary active:scale-95" data-value="${c.value}">
                     <span class="material-symbols-outlined text-[14px]">${c.icon}</span>
                     ${c.label}
                   </button>
                 `;
-              }).join('')}
+      }).join('')}
             </div>
           </div>
 
@@ -699,7 +715,7 @@ export const DashboardView = {
     if (!container || !emptyState) return;
 
     let filter = appStore.state.filterCategory || 'TODAS';
-    
+
     // Filtros lógicos
     let lists = allLists;
     if (filter === 'ATIVAS') {
@@ -721,12 +737,12 @@ export const DashboardView = {
     const countActive = allLists.filter(l => l.status !== 'concluida').length;
     const countPending = allLists.filter(l => l.status !== 'concluida' && (l.items || []).some(i => !i.checked)).length;
     const countCompleted = allLists.filter(l => l.status === 'concluida').length;
-    
+
     const elCountAll = document.getElementById('filter-count-all');
     const elCountActive = document.getElementById('filter-count-active');
     const elCountPending = document.getElementById('filter-count-pending');
     const elCountCompleted = document.getElementById('filter-count-completed');
-    
+
     if (elCountAll) elCountAll.textContent = countAll;
     if (elCountActive) elCountActive.textContent = countActive;
     if (elCountPending) elCountPending.textContent = countPending;
@@ -735,13 +751,13 @@ export const DashboardView = {
     // Atualizar Hero Card
     let totalOrcamento = 0;
     let totalGasto = 0;
-    
+
     allLists.forEach(l => {
       const { orcamento, totalGasto: gasto } = calculateListTotals(l);
       totalOrcamento += orcamento;
       totalGasto += gasto;
     });
-    
+
     const heroBudget = document.getElementById('hero-total-budget');
     const heroSpent = document.getElementById('hero-total-spent');
     const heroActiveCount = document.getElementById('hero-active-count');
@@ -749,14 +765,14 @@ export const DashboardView = {
     const heroPercent = document.getElementById('hero-progress-percent');
     const heroBadge = document.getElementById('hero-saving-badge');
 
-    if(heroBudget) heroBudget.textContent = formatCurrency(totalOrcamento).replace('R$','').trim();
-    if(heroSpent) heroSpent.textContent = formatCurrency(totalGasto);
-    if(heroActiveCount) heroActiveCount.textContent = countActive;
-    
+    if (heroBudget) heroBudget.textContent = formatCurrency(totalOrcamento).replace('R$', '').trim();
+    if (heroSpent) heroSpent.textContent = formatCurrency(totalGasto);
+    if (heroActiveCount) heroActiveCount.textContent = countActive;
+
     let percent = totalOrcamento > 0 ? (totalGasto / totalOrcamento) * 100 : 0;
-    if(heroProgress) heroProgress.style.width = `${Math.min(100, percent)}%`;
-    if(heroPercent) heroPercent.textContent = percent.toFixed(1);
-    
+    if (heroProgress) heroProgress.style.width = `${Math.min(100, percent)}%`;
+    if (heroPercent) heroPercent.textContent = percent.toFixed(1);
+
     if (heroBadge) {
       const restante = totalOrcamento - totalGasto;
       if (restante >= 0) {
@@ -778,12 +794,15 @@ export const DashboardView = {
     emptyState.classList.add('hidden');
     emptyState.classList.remove('flex');
 
-    container.innerHTML = lists.map(list => {
+    const user = appStore.state.currentUser;
+    const userId = user?.id;
+
+    const renderCard = (list) => {
       const { orcamento, totalGasto, saldoDisponivel, percentualConsumido } = calculateListTotals(list);
-      
+
       let saldoColor = 'text-primary';
       let progClass = 'bg-primary';
-      
+
       if (saldoDisponivel < 0) {
         saldoColor = 'text-error';
         progClass = 'bg-error';
@@ -794,24 +813,25 @@ export const DashboardView = {
 
       const progressWidth = Math.min(100, Math.round(percentualConsumido));
       let iconName = 'shopping_cart';
-      if(list.category === 'hortifruti') iconName = 'nutrition';
-      if(list.category === 'farmacia') iconName = 'medical_services';
-      if(list.category === 'festa') iconName = 'celebration';
-      if(list.category === 'outros') iconName = 'category';
+      if (list.category === 'hortifruti') iconName = 'nutrition';
+      if (list.category === 'farmacia') iconName = 'medical_services';
+      if (list.category === 'festa') iconName = 'celebration';
+      if (list.category === 'outros') iconName = 'category';
 
       const qtdItens = (list.items || []).length;
       const itensMarcados = (list.items || []).filter(i => i.checked).length;
       let itemProgress = qtdItens > 0 ? (itensMarcados / qtdItens) * 100 : 0;
 
-      const isOwner = !list.isShared;
       const isConcluida = list.status === 'concluida';
+      const isSharedWithMe = Boolean(list.isShared || (list.owner_id && userId && list.owner_id !== userId));
       const listDateFormatted = formatDateBR(list.createdAt || list.created_at || new Date().toISOString());
 
       let badgeStatus = '';
       if (isConcluida) {
         badgeStatus = `<span class="shrink-0 px-2.5 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant text-[11px] font-semibold flex items-center gap-1.5"><span class="material-symbols-outlined text-[12px] text-primary">check</span> Concluída</span>`;
-      } else if (list.isShared) {
-        badgeStatus = `<span class="shrink-0 px-2.5 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed text-[11px] font-bold flex items-center gap-1.5"><span class="material-symbols-outlined text-[14px]">group</span> Compartilhada</span>`;
+      } else if (isSharedWithMe) {
+        const autor = list.owner_name || 'Colaborador';
+        badgeStatus = `<span class="shrink-0 px-2.5 py-0.5 rounded-full bg-secondary-container text-on-secondary-container text-[11px] font-bold flex items-center gap-1" title="Compartilhada por ${escapeHtml(autor)}"><span class="material-symbols-outlined text-[13px]">person</span> Autor: ${escapeHtml(autor)}</span>`;
       } else {
         badgeStatus = `<span class="shrink-0 px-2.5 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed text-[11px] font-bold flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span> Ativa</span>`;
       }
@@ -877,8 +897,88 @@ export const DashboardView = {
           </div>
         </article>
       `;
-    }).join('');
-    
+    };
+
+    const isMinhaLista = (l) => !l.isShared && (!l.owner_id || (userId && l.owner_id === userId));
+    const isCompartilhada = (l) => Boolean(l.isShared || (l.owner_id && userId && l.owner_id !== userId));
+
+    if (filter === 'TODAS') {
+      const minhas = lists.filter(l => isMinhaLista(l) && l.status !== 'concluida');
+      const comp = lists.filter(l => isCompartilhada(l) && l.status !== 'concluida');
+      const conc = lists.filter(l => l.status === 'concluida');
+
+      let sectionsHtml = '';
+
+      if (minhas.length > 0) {
+        sectionsHtml += `
+          <div class="flex flex-col gap-2.5">
+            <div class="flex items-center justify-between pt-1 pb-0.5">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary text-[18px]">format_list_bulleted</span>
+                <h3 class="text-xs font-bold text-on-surface uppercase tracking-wider">Minhas Listas</h3>
+              </div>
+              <span class="text-[11px] font-semibold text-on-surface-variant bg-surface-container px-2 py-0.5 rounded-full">${minhas.length}</span>
+            </div>
+            ${minhas.map(l => renderCard(l)).join('')}
+          </div>
+        `;
+      }
+
+      if (comp.length > 0) {
+        sectionsHtml += `
+          <div class="flex flex-col gap-2.5 ${minhas.length > 0 ? 'mt-4 pt-3 border-t border-outline-variant/20' : ''}">
+            <div class="flex items-center justify-between pt-1 pb-0.5">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-secondary text-[18px]">group</span>
+                <h3 class="text-xs font-bold text-on-surface uppercase tracking-wider">Compartilhadas Comigo</h3>
+              </div>
+              <span class="text-[11px] font-semibold text-on-secondary-container bg-secondary-container px-2 py-0.5 rounded-full">${comp.length}</span>
+            </div>
+            ${comp.map(l => renderCard(l)).join('')}
+          </div>
+        `;
+      }
+
+      if (conc.length > 0) {
+        sectionsHtml += `
+          <div class="flex flex-col gap-2.5 mt-4 pt-3 border-t border-outline-variant/20">
+            <button type="button" id="btn-toggle-concluidas" class="w-full flex items-center justify-between py-1 text-left cursor-pointer group">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-outline text-[18px]">task_alt</span>
+                <h3 class="text-xs font-bold text-on-surface-variant uppercase tracking-wider group-hover:text-on-surface">Listas Concluídas / Histórico</h3>
+                <span class="text-[11px] font-semibold text-outline bg-surface-container px-2 py-0.5 rounded-full">${conc.length}</span>
+              </div>
+              <span class="material-symbols-outlined text-[18px] text-outline transition-transform duration-200" id="icon-toggle-concluidas">expand_more</span>
+            </button>
+            <div id="container-concluidas" class="hidden flex flex-col gap-3">
+              ${conc.map(l => renderCard(l)).join('')}
+            </div>
+          </div>
+        `;
+      }
+
+      container.innerHTML = sectionsHtml || lists.map(l => renderCard(l)).join('');
+    } else {
+      container.innerHTML = lists.map(l => renderCard(l)).join('');
+    }
+
+    // Toggle de Listas Concluídas
+    const btnToggleConc = container.querySelector('#btn-toggle-concluidas');
+    const containerConc = container.querySelector('#container-concluidas');
+    const iconToggleConc = container.querySelector('#icon-toggle-concluidas');
+    if (btnToggleConc && containerConc) {
+      btnToggleConc.addEventListener('click', () => {
+        const isHidden = containerConc.classList.contains('hidden');
+        if (isHidden) {
+          containerConc.classList.remove('hidden');
+          if (iconToggleConc) iconToggleConc.textContent = 'expand_less';
+        } else {
+          containerConc.classList.add('hidden');
+          if (iconToggleConc) iconToggleConc.textContent = 'expand_more';
+        }
+      });
+    }
+
     // Anexar listeners nos botões de Abrir Lista
     container.querySelectorAll('.btn-card-open-list').forEach(btn => {
       btn.addEventListener('click', (e) => {
@@ -922,7 +1022,7 @@ export const DashboardView = {
                           <span class="inline-block animate-bounce text-sm">👋</span>
                 </span>
                 <h1 class="font-headline-sm text-headline-sm text-on-surface tracking-tight font-bold">
-                          Suas Listas de Compras
+                          Controle Financeiro
                         </h1>
               </div>
               <div class="flex items-center gap-2">
@@ -981,11 +1081,6 @@ export const DashboardView = {
                 <div id="hero-saving-badge" class="px-2 py-0.5 rounded-full bg-on-primary/15 text-secondary-fixed font-semibold text-[10px] flex items-center gap-1">
                   Resta: R$ 0,00 🎉
                 </div>
-                <button id="btn-dashboard-ir-carteira" type="button" class="flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/25 hover:bg-black/35 text-on-primary text-[11px] font-semibold transition-all">
-                  <span class="material-symbols-outlined text-[14px] text-secondary-fixed">account_balance_wallet</span>
-                  <span>Caixa: <strong id="dashboard-wallet-balance" class="text-secondary-fixed">R$ 0,00</strong></span>
-                  <span class="material-symbols-outlined text-[12px] opacity-70">chevron_right</span>
-                </button>
               </div>
             </div>
 
@@ -1046,7 +1141,7 @@ export const DashboardView = {
         </div>
 
         <!-- Botão Flutuante de Ação Rápida mais Compacto e Equilibrado -->
-        <div class="sticky bottom-24 z-40 flex justify-end w-full pr-4 pointer-events-none mb-6">
+        <div id="dashboard-fab-container" class="fixed right-4 z-40 flex justify-end pointer-events-none">
           <button class="pointer-events-auto flex items-center gap-1.5 h-11 px-4 rounded-full bg-gradient-to-r from-primary to-primary-container text-on-primary font-label-md text-label-md shadow-[0_6px_20px_-4px_rgba(0,105,72,0.4)] hover:shadow-[0_10px_25px_-4px_rgba(0,105,72,0.5)] active:scale-95 transition-all transform hover:-translate-y-0.5" id="btn-dashboard-nova-lista" type="button">
             <span class="material-symbols-outlined text-[20px]">add</span>
             <span class="font-bold">Nova Lista</span>

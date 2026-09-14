@@ -78,6 +78,21 @@ export class AdMobManager {
       try {
         const { AdMob } = window.Capacitor.Plugins;
         const unitId = this.config.isTestMode ? this.config.testUnits.banner : this.config.units.banner;
+
+        if (!this._bannerSizeListenerAdded) {
+          this._bannerSizeListenerAdded = true;
+          try {
+            AdMob.addListener('bannerAdSizeChanged', (info) => {
+              if (info && info.height) {
+                document.documentElement.style.setProperty('--admob-banner-height', `${info.height}px`);
+              }
+            });
+            AdMob.addListener('bannerAdLoaded', () => {
+              document.body.classList.add('has-native-ad-banner');
+            });
+          } catch (_) {}
+        }
+
         await AdMob.showBanner({
           adId: unitId,
           adSize: 'ADAPTIVE_BANNER',
@@ -85,6 +100,7 @@ export class AdMobManager {
           margin: 0,
           isTesting: this.config.isTestMode
         });
+        document.documentElement.style.setProperty('--admob-banner-height', '50px');
         document.body.classList.add('has-native-ad-banner');
         console.log('[AdMob Native] Banner nativo ativo no rodapé.');
         return;

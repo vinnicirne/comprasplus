@@ -39,11 +39,11 @@ function updateActiveTab(path) {
   navTabs.forEach(tab => {
     const target = tab.dataset.target;
     if (target === path) {
-      tab.classList.add('active', 'text-primary', 'bg-primary-fixed/30', 'rounded-full');
-      tab.classList.remove('text-on-surface-variant', 'hover:bg-surface-container-high');
+      tab.classList.add('active', 'text-primary', 'rounded-full');
+      tab.classList.remove('text-on-surface-variant');
     } else {
-      tab.classList.remove('active', 'text-primary', 'bg-primary-fixed/30');
-      tab.classList.add('text-on-surface-variant', 'hover:bg-surface-container-high', 'hover:text-primary', 'rounded-full');
+      tab.classList.remove('active', 'text-primary');
+      tab.classList.add('text-on-surface-variant', 'hover:text-primary', 'rounded-full');
     }
   });
 

@@ -1,12 +1,13 @@
 import { appStore } from '../store/appStore.js';
 import * as walletService from '../services/walletService.js';
 import { formatCurrency, formatDateBR, escapeHtml } from '../utils/formatters.js';
-import { showToast } from '../utils/toast.js';
+import { showToast, showConfirmDialog } from '../utils/toast.js';
 
 export const WalletView = {
   currentFilter: {
     year: new Date().getFullYear(),
-    month: 'all'
+    month: 'all',
+    tab: 'all' // 'all' | 'entradas' | 'despesas' | 'a_pagar' | 'parcelados' | 'recorrentes'
   },
   walletEntries: [],
   purchaseHistory: [],
@@ -27,13 +28,13 @@ export const WalletView = {
               <span class="material-symbols-outlined text-[22px]">account_balance_wallet</span>
             </span>
             <div>
-              <h1 class="font-headline-sm text-headline-sm font-bold text-on-surface leading-tight">Carteira</h1>
-              <span class="font-body-sm text-on-surface-variant text-xs">Gestão de saldo e receitas</span>
+              <h1 class="font-headline-sm text-headline-sm font-bold text-on-surface leading-tight">Hub de Finanças</h1>
+              <span class="font-body-sm text-on-surface-variant text-xs">Gestão de saldo, contas a pagar e despesas</span>
             </div>
           </div>
           <button id="btn-nova-entrada-top" class="h-10 px-3 rounded-xl bg-primary text-on-primary font-label-md font-semibold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all">
-            <span class="material-symbols-outlined text-[18px]">add</span>
-            <span>Nova Entrada</span>
+            <span class="material-symbols-outlined text-[18px]">add_circle</span>
+            <span>Novo Lançamento</span>
           </button>
         </header>
 
@@ -70,7 +71,7 @@ export const WalletView = {
 
             <div class="flex items-start justify-between relative z-10">
               <div class="flex flex-col">
-                <span class="font-label-sm text-xs font-semibold tracking-wider uppercase opacity-85">Saldo em Caixa da Carteira</span>
+                <span class="font-label-sm text-xs font-semibold tracking-wider uppercase opacity-85">Saldo em Caixa Real</span>
                 <span class="font-headline-lg text-3xl font-extrabold mt-1 tracking-tight" id="carteira-saldo-carteira">R$ 0,00</span>
               </div>
               <div id="carteira-saldo-badge" class="px-3 py-1 rounded-full text-xs font-bold bg-white/20 backdrop-blur-md">
@@ -81,37 +82,62 @@ export const WalletView = {
             <div class="grid grid-cols-2 gap-3 pt-3 border-t border-white/15 relative z-10">
               <div class="flex flex-col">
                 <span class="font-label-sm text-[11px] opacity-80 uppercase tracking-wide">Total Entradas</span>
-                <span class="font-body-md text-base font-bold" id="carteira-total-entradas">R$ 0,00</span>
+                <span class="font-body-md text-base font-bold text-emerald-200" id="carteira-total-entradas">R$ 0,00</span>
                 <span class="font-label-sm text-[10px] opacity-75" id="carteira-entradas-count">0 registros</span>
               </div>
               <div class="flex flex-col text-right">
-                <span class="font-label-sm text-[11px] opacity-80 uppercase tracking-wide">Gastos em Compras</span>
-                <span class="font-body-md text-base font-bold" id="carteira-total-saidas">R$ 0,00</span>
-                <span class="font-label-sm text-[10px] opacity-75" id="carteira-saidas-count">0 compras</span>
+                <span class="font-label-sm text-[11px] opacity-80 uppercase tracking-wide">Total Saídas / Compras</span>
+                <span class="font-body-md text-base font-bold text-rose-200" id="carteira-total-saidas">R$ 0,00</span>
+                <span class="font-label-sm text-[10px] opacity-75" id="carteira-saidas-count">0 saídas</span>
               </div>
             </div>
           </div>
 
-          <!-- Mini Cards de Previsão -->
+          <!-- Mini Cards: Contas a Pagar & Próximo Vencimento -->
           <div class="grid grid-cols-3 gap-2">
             <div class="bg-surface-container-lowest p-3 rounded-2xl border border-outline-variant/30 flex flex-col shadow-xs">
-              <span class="font-label-sm text-[10px] text-on-surface-variant uppercase font-semibold">Salário</span>
-              <span class="font-label-lg font-bold text-on-surface text-sm mt-0.5 truncate" id="carteira-sum-salario">R$ 0,00</span>
+              <span class="font-label-sm text-[10px] text-on-surface-variant uppercase font-semibold">Contas a Pagar</span>
+              <span class="font-label-lg font-bold text-error text-sm mt-0.5 truncate" id="carteira-sum-a-pagar">R$ 0,00</span>
+              <span class="text-[10px] text-outline truncate" id="carteira-count-a-pagar">0 pendentes</span>
             </div>
             <div class="bg-surface-container-lowest p-3 rounded-2xl border border-outline-variant/30 flex flex-col shadow-xs">
-              <span class="font-label-sm text-[10px] text-on-surface-variant uppercase font-semibold">Renda Extra</span>
-              <span class="font-label-lg font-bold text-on-surface text-sm mt-0.5 truncate" id="carteira-sum-extra">R$ 0,00</span>
+              <span class="font-label-sm text-[10px] text-on-surface-variant uppercase font-semibold">Próx. Vencimento</span>
+              <span class="font-label-lg font-bold text-on-surface text-sm mt-0.5 truncate" id="carteira-prox-vencimento">Nenhum</span>
+              <span class="text-[10px] text-tertiary truncate" id="carteira-prox-dias">-</span>
             </div>
             <div class="bg-surface-container-lowest p-3 rounded-2xl border border-outline-variant/30 flex flex-col shadow-xs">
               <span class="font-label-sm text-[10px] text-on-surface-variant uppercase font-semibold">A Receber</span>
-              <span class="font-label-lg font-bold text-tertiary text-sm mt-0.5 truncate" id="carteira-sum-areceber">R$ 0,00</span>
+              <span class="font-label-lg font-bold text-secondary text-sm mt-0.5 truncate" id="carteira-sum-areceber">R$ 0,00</span>
+              <span class="text-[10px] text-outline truncate">Previsão</span>
             </div>
           </div>
 
+          <!-- Abas de Navegação Financeira -->
+          <div class="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs font-semibold">
+            <button type="button" class="tab-btn px-3 py-2 rounded-xl transition-all ${this.currentFilter.tab === 'all' ? 'bg-primary text-on-primary shadow-xs' : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container'}" data-tab="all">
+              Todos
+            </button>
+            <button type="button" class="tab-btn px-3 py-2 rounded-xl transition-all ${this.currentFilter.tab === 'a_pagar' ? 'bg-error text-on-error shadow-xs' : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container'}" data-tab="a_pagar">
+              ⏰ A Pagar
+            </button>
+            <button type="button" class="tab-btn px-3 py-2 rounded-xl transition-all ${this.currentFilter.tab === 'despesas' ? 'bg-primary text-on-primary shadow-xs' : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container'}" data-tab="despesas">
+              🔴 Despesas
+            </button>
+            <button type="button" class="tab-btn px-3 py-2 rounded-xl transition-all ${this.currentFilter.tab === 'entradas' ? 'bg-primary text-on-primary shadow-xs' : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container'}" data-tab="entradas">
+              🟢 Entradas
+            </button>
+            <button type="button" class="tab-btn px-3 py-2 rounded-xl transition-all ${this.currentFilter.tab === 'parcelados' ? 'bg-primary text-on-primary shadow-xs' : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container'}" data-tab="parcelados">
+              💳 Parcelados
+            </button>
+            <button type="button" class="tab-btn px-3 py-2 rounded-xl transition-all ${this.currentFilter.tab === 'recorrentes' ? 'bg-primary text-on-primary shadow-xs' : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container'}" data-tab="recorrentes">
+              🔁 Recorrentes
+            </button>
+          </div>
+
           <!-- Seção de Lançamentos -->
-          <div class="flex items-center justify-between mt-2">
-            <h2 class="font-headline-sm text-base font-bold text-on-surface">Lançamentos de Entrada</h2>
-            <span class="font-body-sm text-xs text-on-surface-variant bg-surface-container px-2.5 py-0.5 rounded-full" id="badge-total-lancamentos">0 entradas</span>
+          <div class="flex items-center justify-between mt-1">
+            <h2 class="font-headline-sm text-base font-bold text-on-surface" id="titulo-secao-lancamentos">Lançamentos</h2>
+            <span class="font-body-sm text-xs text-on-surface-variant bg-surface-container px-2.5 py-0.5 rounded-full" id="badge-total-lancamentos">0 registros</span>
           </div>
 
           <div id="carteira-entries-list" class="flex flex-col gap-2.5">
@@ -122,29 +148,52 @@ export const WalletView = {
         </div>
 
         <!-- FAB Adicionar Entrada -->
-        <button id="btn-nova-entrada-fab" class="fixed bottom-20 right-6 w-14 h-14 bg-secondary text-on-secondary rounded-2xl shadow-lg flex items-center justify-center hover:bg-secondary-container hover:text-on-secondary-fixed active:scale-90 transition-all z-40">
+        <button id="btn-nova-entrada-fab" class="fixed bottom-20 right-6 w-14 h-14 bg-primary text-on-primary rounded-2xl shadow-lg flex items-center justify-center hover:bg-primary/90 active:scale-90 transition-all z-40" title="Novo Lançamento">
           <span class="material-symbols-outlined text-[28px]">add</span>
         </button>
 
-        <!-- Modal Nova Entrada -->
-        <div id="modal-nova-entrada" class="fixed inset-0 bg-black/50 z-50 opacity-0 pointer-events-none transition-opacity duration-300 backdrop-blur-xs flex items-end justify-center">
-          <div class="w-full max-w-lg bg-surface rounded-t-3xl shadow-2xl p-6 flex flex-col gap-4 transform translate-y-full transition-transform duration-300 pb-safe max-h-[90vh] overflow-y-auto" id="modal-nova-entrada-sheet">
+        <!-- Modal Novo Lançamento Inteligente -->
+        <div id="modal-nova-entrada" class="fixed inset-0 bg-black/60 z-50 opacity-0 pointer-events-none transition-opacity duration-300 backdrop-blur-xs flex items-end justify-center">
+          <div class="w-full max-w-lg bg-surface rounded-t-3xl shadow-2xl p-6 flex flex-col gap-4 transform translate-y-full transition-transform duration-300 pb-safe max-h-[92vh] overflow-y-auto" id="modal-nova-entrada-sheet">
             <div class="w-12 h-1.5 bg-outline/20 rounded-full mx-auto -mt-2 mb-1"></div>
             
             <div class="flex items-center justify-between">
-              <h3 class="font-headline-sm font-bold text-on-surface text-lg">Nova Entrada Financeira</h3>
+              <h3 class="font-headline-sm font-bold text-on-surface text-lg" id="modal-titulo">Novo Lançamento Financeiro</h3>
               <button type="button" id="btn-fechar-modal-entrada" class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high transition-all">
                 <span class="material-symbols-outlined text-[18px]">close</span>
               </button>
             </div>
 
             <form id="form-nova-entrada" class="flex flex-col gap-3.5">
+              <!-- Seletor de Tipo: Entrada vs Despesa -->
               <div class="flex flex-col gap-1">
-                <label class="font-label-sm text-xs font-semibold text-on-surface-variant uppercase">Descrição / Origem *</label>
-                <input type="text" id="entrada-descricao" placeholder="Ex: Salário Mensal, Freelance, Venda" required
+                <label class="font-label-sm text-xs font-semibold text-on-surface-variant uppercase">Tipo de Movimentação *</label>
+                <div class="grid grid-cols-2 gap-2">
+                  <label class="cursor-pointer">
+                    <input type="radio" name="transacao-tipo" value="entrada" checked class="peer sr-only">
+                    <div class="p-2.5 rounded-xl border border-outline-variant/40 text-on-surface-variant text-xs font-bold peer-checked:bg-emerald-500/15 peer-checked:text-emerald-700 dark:peer-checked:text-emerald-300 peer-checked:border-emerald-500 flex items-center justify-center gap-1.5 transition-all text-center">
+                      <span class="material-symbols-outlined text-[18px]">arrow_circle_down</span>
+                      🟢 Entrada / Receita
+                    </div>
+                  </label>
+                  <label class="cursor-pointer">
+                    <input type="radio" name="transacao-tipo" value="saida" class="peer sr-only">
+                    <div class="p-2.5 rounded-xl border border-outline-variant/40 text-on-surface-variant text-xs font-bold peer-checked:bg-rose-500/15 peer-checked:text-rose-700 dark:peer-checked:text-rose-300 peer-checked:border-rose-500 flex items-center justify-center gap-1.5 transition-all text-center">
+                      <span class="material-symbols-outlined text-[18px]">arrow_circle_up</span>
+                      🔴 Despesa / Conta a Pagar
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Descrição -->
+              <div class="flex flex-col gap-1">
+                <label class="font-label-sm text-xs font-semibold text-on-surface-variant uppercase" id="label-descricao">Descrição / Identificação *</label>
+                <input type="text" id="entrada-descricao" placeholder="Ex: Energia Elétrica, Salário, Internet" required
                   class="w-full h-12 px-4 rounded-xl bg-surface-container-low text-on-surface font-body-md text-sm border border-outline-variant/40 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all">
               </div>
 
+              <!-- Valor e Data -->
               <div class="grid grid-cols-2 gap-3">
                 <div class="flex flex-col gap-1">
                   <label class="font-label-sm text-xs font-semibold text-on-surface-variant uppercase">Valor (R$) *</label>
@@ -156,48 +205,103 @@ export const WalletView = {
                 </div>
 
                 <div class="flex flex-col gap-1">
-                  <label class="font-label-sm text-xs font-semibold text-on-surface-variant uppercase">Data *</label>
+                  <label class="font-label-sm text-xs font-semibold text-on-surface-variant uppercase" id="label-data">Data de Vencimento *</label>
                   <input type="date" id="entrada-data" required
                     class="w-full h-12 px-3 rounded-xl bg-surface-container-low text-on-surface font-body-md text-sm border border-outline-variant/40 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all">
                 </div>
               </div>
 
+              <!-- Categoria -->
               <div class="flex flex-col gap-1">
                 <label class="font-label-sm text-xs font-semibold text-on-surface-variant uppercase">Categoria *</label>
                 <select id="entrada-categoria" required
                   class="w-full h-12 px-3 rounded-xl bg-surface-container-low text-on-surface font-body-md text-sm border border-outline-variant/40 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all cursor-pointer">
+                  <option value="Moradia">🏠 Moradia (Aluguel, Luz, Água, Gás)</option>
+                  <option value="Alimentação">🛒 Alimentação & Mercado</option>
+                  <option value="Transporte">🚗 Transporte & Combustível</option>
+                  <option value="Saúde">💊 Saúde & Medicamentos</option>
+                  <option value="Lazer">🍿 Lazer & Assinaturas</option>
+                  <option value="Educação">📚 Educação & Cursos</option>
                   <option value="Salário">💼 Salário / Pagamento Principal</option>
                   <option value="Renda Extra">⚡ Renda Extra / Freelance</option>
-                  <option value="Investimentos">📈 Rendimentos / Investimentos</option>
-                  <option value="Presente">🎁 Presente / Doação</option>
-                  <option value="Outros">💵 Outras Entradas</option>
+                  <option value="Outros">💵 Outros Gastos / Entradas</option>
                 </select>
               </div>
 
-              <div class="flex flex-col gap-1">
-                <label class="font-label-sm text-xs font-semibold text-on-surface-variant uppercase">Status do Valor *</label>
-                <div class="grid grid-cols-2 gap-2">
+              <!-- Status do Lançamento -->
+              <div class="flex flex-col gap-1" id="grupo-status-transacao">
+                <label class="font-label-sm text-xs font-semibold text-on-surface-variant uppercase">Situação *</label>
+                <div class="grid grid-cols-2 gap-2" id="status-radios-container">
                   <label class="cursor-pointer">
-                    <input type="radio" name="entrada-status" value="recebido" checked class="peer sr-only">
+                    <input type="radio" name="entrada-status" value="pago" class="peer sr-only">
                     <div class="p-2.5 rounded-xl border border-outline-variant/40 text-on-surface-variant text-xs font-semibold peer-checked:bg-secondary-container peer-checked:text-on-secondary-container peer-checked:border-secondary flex items-center justify-center gap-1.5 transition-all text-center">
                       <span class="material-symbols-outlined text-[16px]">check_circle</span>
-                      Já Recebido
+                      <span id="label-status-pago">Já Pago</span>
                     </div>
                   </label>
                   <label class="cursor-pointer">
-                    <input type="radio" name="entrada-status" value="a_receber" class="peer sr-only">
-                    <div class="p-2.5 rounded-xl border border-outline-variant/40 text-on-surface-variant text-xs font-semibold peer-checked:bg-tertiary-container peer-checked:text-on-tertiary-container peer-checked:border-tertiary flex items-center justify-center gap-1.5 transition-all text-center">
+                    <input type="radio" name="entrada-status" value="a_pagar" checked class="peer sr-only">
+                    <div class="p-2.5 rounded-xl border border-outline-variant/40 text-on-surface-variant text-xs font-semibold peer-checked:bg-amber-500/15 peer-checked:text-amber-700 dark:peer-checked:text-amber-300 peer-checked:border-amber-500 flex items-center justify-center gap-1.5 transition-all text-center">
                       <span class="material-symbols-outlined text-[16px]">schedule</span>
-                      A Receber
+                      <span id="label-status-pendente">A Pagar (Pendente)</span>
                     </div>
                   </label>
+                </div>
+              </div>
+
+              <!-- Painel Despesas: Parcelamento & Recorrência -->
+              <div id="secao-despesa-avancada" class="hidden flex flex-col gap-3 p-3 bg-surface-container-low rounded-2xl border border-outline-variant/30">
+                <!-- Parcelamento -->
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary text-[20px]">credit_card</span>
+                    <div class="flex flex-col">
+                      <span class="text-xs font-bold text-on-surface">Compra Parcelada</span>
+                      <span class="text-[10px] text-on-surface-variant">Dividir em várias parcelas mensais</span>
+                    </div>
+                  </div>
+                  <input type="checkbox" id="check-parcelamento" class="w-4 h-4 rounded text-primary accent-primary cursor-pointer">
+                </div>
+
+                <div id="box-parcelamento-config" class="hidden flex flex-col gap-2 pt-2 border-t border-outline-variant/20">
+                  <div class="flex items-center justify-between gap-2">
+                    <label class="text-xs font-semibold text-on-surface-variant">Quantidade de Parcelas:</label>
+                    <select id="select-qtd-parcelas" class="px-3 py-1.5 rounded-lg bg-surface border border-outline-variant/40 text-xs font-bold text-on-surface cursor-pointer">
+                      ${[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 18, 24].map(n => `<option value="${n}">${n}x parcelas</option>`).join('')}
+                    </select>
+                  </div>
+                  <span class="text-[11px] text-primary font-medium" id="preview-parcelas">Ex: 2x de R$ 0,00</span>
+                </div>
+
+                <!-- Recorrência (Pagamento Fixo) -->
+                <div class="flex items-center justify-between pt-2 border-t border-outline-variant/20">
+                  <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary text-[20px]">autorenew</span>
+                    <div class="flex flex-col">
+                      <span class="text-xs font-bold text-on-surface">Pagamento Recorrente / Fixo</span>
+                      <span class="text-[10px] text-on-surface-variant">Gera a próxima cobrança ao dar baixa</span>
+                    </div>
+                  </div>
+                  <input type="checkbox" id="check-recorrente" class="w-4 h-4 rounded text-primary accent-primary cursor-pointer">
+                </div>
+
+                <div id="box-recorrente-config" class="hidden flex flex-col gap-2 pt-2 border-t border-outline-variant/20">
+                  <div class="flex items-center justify-between gap-2">
+                    <label class="text-xs font-semibold text-on-surface-variant">Frequência:</label>
+                    <select id="select-periodo-recorrente" class="px-3 py-1.5 rounded-lg bg-surface border border-outline-variant/40 text-xs font-bold text-on-surface cursor-pointer">
+                      <option value="mensal">Mensal (todo mês)</option>
+                      <option value="semanal">Semanal (a cada 7 dias)</option>
+                      <option value="anual">Anual (uma vez por ano)</option>
+                    </select>
+                  </div>
+                  <span class="text-[11px] text-secondary font-medium" id="preview-recorrente">Ao dar baixa, o sistema criará a próxima ocorrência automaticamente.</span>
                 </div>
               </div>
 
               <button type="submit" id="btn-submit-salvar-entrada"
                 class="w-full h-12 rounded-2xl bg-primary text-on-primary font-semibold text-sm flex items-center justify-center gap-2 shadow-md active:scale-[0.98] transition-all mt-2">
                 <span class="material-symbols-outlined text-[20px]">save</span>
-                Gravar na Carteira
+                Gravar Lançamento
               </button>
             </form>
           </div>
@@ -210,7 +314,7 @@ export const WalletView = {
   },
 
   initEvents() {
-    // Filtros
+    // Filtros de Ano e Mês
     const selAno = document.getElementById('filtro-carteira-ano');
     const selMes = document.getElementById('filtro-carteira-mes');
 
@@ -222,6 +326,17 @@ export const WalletView = {
     selMes?.addEventListener('change', (e) => {
       this.currentFilter.month = e.target.value;
       this.renderBalanceAndList();
+    });
+
+    // Abas
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.currentFilter.tab = btn.dataset.tab;
+        document.querySelectorAll('.tab-btn').forEach(b => {
+          b.className = `tab-btn px-3 py-2 rounded-xl transition-all ${b.dataset.tab === this.currentFilter.tab ? 'bg-primary text-on-primary shadow-xs' : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container'}`;
+        });
+        this.renderBalanceAndList();
+      });
     });
 
     // Abrir Modal
@@ -238,12 +353,89 @@ export const WalletView = {
       if (e.target === modal) this.closeModal();
     });
 
+    // Alternar Tipo: Entrada vs Saída
+    const radioTipos = document.querySelectorAll('input[name="transacao-tipo"]');
+    radioTipos.forEach(r => {
+      r.addEventListener('change', () => this.handleTipoChange(r.value));
+    });
+
+    // Parcelamento Toggle e Cálculo
+    const checkParcelado = document.getElementById('check-parcelamento');
+    const boxParcelado = document.getElementById('box-parcelamento-config');
+    const selectParcelas = document.getElementById('select-qtd-parcelas');
+    const inputValor = document.getElementById('entrada-valor');
+
+    checkParcelado?.addEventListener('change', () => {
+      if (checkParcelado.checked) {
+        boxParcelado?.classList.remove('hidden');
+        // Desmarca recorrente se marcar parcelado
+        const checkRecorrente = document.getElementById('check-recorrente');
+        if (checkRecorrente) checkRecorrente.checked = false;
+        document.getElementById('box-recorrente-config')?.classList.add('hidden');
+      } else {
+        boxParcelado?.classList.add('hidden');
+      }
+      this.updateParcelasPreview();
+    });
+
+    selectParcelas?.addEventListener('change', () => this.updateParcelasPreview());
+    inputValor?.addEventListener('input', () => this.updateParcelasPreview());
+
+    // Recorrência Toggle
+    const checkRecorrente = document.getElementById('check-recorrente');
+    const boxRecorrente = document.getElementById('box-recorrente-config');
+    checkRecorrente?.addEventListener('change', () => {
+      if (checkRecorrente.checked) {
+        boxRecorrente?.classList.remove('hidden');
+        // Desmarca parcelado se marcar recorrente
+        if (checkParcelado) checkParcelado.checked = false;
+        boxParcelado?.classList.add('hidden');
+      } else {
+        boxRecorrente?.classList.add('hidden');
+      }
+    });
+
     // Form Submit
     const form = document.getElementById('form-nova-entrada');
     form?.addEventListener('submit', async (e) => {
       e.preventDefault();
       await this.handleFormSubmit();
     });
+  },
+
+  handleTipoChange(tipo) {
+    const secaoDespesa = document.getElementById('secao-despesa-avancada');
+    const labelDesc = document.getElementById('label-descricao');
+    const labelData = document.getElementById('label-data');
+    const labelPago = document.getElementById('label-status-pago');
+    const labelPendente = document.getElementById('label-status-pendente');
+    const catSelect = document.getElementById('entrada-categoria');
+
+    if (tipo === 'saida') {
+      secaoDespesa?.classList.remove('hidden');
+      if (labelDesc) labelDesc.textContent = 'Descrição da Despesa / Conta *';
+      if (labelData) labelData.textContent = 'Data de Vencimento *';
+      if (labelPago) labelPago.textContent = 'Já Pago';
+      if (labelPendente) labelPendente.textContent = 'A Pagar (Pendente)';
+      if (catSelect && catSelect.value === 'Salário') catSelect.value = 'Moradia';
+    } else {
+      secaoDespesa?.classList.add('hidden');
+      if (labelDesc) labelDesc.textContent = 'Descrição da Entrada / Origem *';
+      if (labelData) labelData.textContent = 'Data de Recebimento *';
+      if (labelPago) labelPago.textContent = 'Já Recebido';
+      if (labelPendente) labelPendente.textContent = 'A Receber (Previsão)';
+      if (catSelect && catSelect.value === 'Moradia') catSelect.value = 'Salário';
+    }
+  },
+
+  updateParcelasPreview() {
+    const val = parseFloat(document.getElementById('entrada-valor')?.value) || 0;
+    const qtd = parseInt(document.getElementById('select-qtd-parcelas')?.value) || 2;
+    const preview = document.getElementById('preview-parcelas');
+    if (preview) {
+      const parcela = Math.round((val / qtd) * 100) / 100;
+      preview.textContent = `${qtd}x de ${formatCurrency(parcela)} (Total: ${formatCurrency(val)})`;
+    }
   },
 
   openModal() {
@@ -292,7 +484,7 @@ export const WalletView = {
     );
 
     // Saldo real em caixa
-    const realSaldo = balance.saldoGeralCarteira;
+    const realSaldo = balance.saldoEmCaixa;
     const elSaldo = document.getElementById('carteira-saldo-carteira');
     const cardSaldo = document.getElementById('card-saldo-carteira');
     const elBadge = document.getElementById('carteira-saldo-badge');
@@ -321,69 +513,163 @@ export const WalletView = {
     if (elEntradas) elEntradas.textContent = formatCurrency(isPeriodAll ? balance.totalGeralRecebido : balance.totalRecebido);
     if (elSaidas) elSaidas.textContent = formatCurrency(isPeriodAll ? balance.totalGeralSaidas : balance.totalSaidas);
     if (elEntradasCount) elEntradasCount.textContent = `${balance.entriesCount} ${balance.entriesCount === 1 ? 'registro' : 'registros'}`;
-    if (elSaidasCount) elSaidasCount.textContent = `${balance.purchasesCount} ${balance.purchasesCount === 1 ? 'compra' : 'compras'}`;
+    if (elSaidasCount) elSaidasCount.textContent = `${balance.purchasesCount} compras + despesas`;
 
     // Mini cards
-    const elSalario = document.getElementById('carteira-sum-salario');
-    const elExtra = document.getElementById('carteira-sum-extra');
+    const elAPagar = document.getElementById('carteira-sum-a-pagar');
+    const elCountAPagar = document.getElementById('carteira-count-a-pagar');
+    const elProxVenc = document.getElementById('carteira-prox-vencimento');
+    const elProxDias = document.getElementById('carteira-prox-dias');
     const elAReceber = document.getElementById('carteira-sum-areceber');
 
-    if (elSalario) elSalario.textContent = formatCurrency(balance.byCategory['Salário'] || 0);
-    if (elExtra) elExtra.textContent = formatCurrency(balance.byCategory['Renda Extra'] || 0);
-    if (elAReceber) elAReceber.textContent = formatCurrency(balance.totalAReceber);
+    if (elAPagar) elAPagar.textContent = formatCurrency(balance.totalGeralContasAPagar);
+    if (elCountAPagar) elCountAPagar.textContent = `${balance.contasAPagarList.length} ${balance.contasAPagarList.length === 1 ? 'pendente' : 'pendentes'}`;
+    if (elAReceber) elAReceber.textContent = formatCurrency(balance.totalGeralAReceber);
 
-    // Lista de Lançamentos
+    if (balance.proximoVencimento) {
+      const vDate = balance.proximoVencimento.dueDate || balance.proximoVencimento.entryDate;
+      if (elProxVenc) elProxVenc.textContent = formatDateBR(vDate);
+      
+      const today = new Date().toISOString().split('T')[0];
+      if (vDate < today) {
+        if (elProxDias) {
+          elProxDias.textContent = 'Vencida!';
+          elProxDias.className = 'text-[10px] text-error font-bold truncate';
+        }
+      } else if (vDate === today) {
+        if (elProxDias) {
+          elProxDias.textContent = 'Vence hoje';
+          elProxDias.className = 'text-[10px] text-amber-600 font-bold truncate';
+        }
+      } else {
+        const diffDays = Math.ceil((new Date(vDate + 'T12:00:00') - new Date(today + 'T12:00:00')) / (1000 * 60 * 60 * 24));
+        if (elProxDias) {
+          elProxDias.textContent = `Em ${diffDays} dias`;
+          elProxDias.className = 'text-[10px] text-primary font-semibold truncate';
+        }
+      }
+    } else {
+      if (elProxVenc) elProxVenc.textContent = 'Nenhum';
+      if (elProxDias) elProxDias.textContent = 'Em dia';
+    }
+
+    // Filtragem por Aba
+    let displayEntries = [...balance.entries];
+    const tab = this.currentFilter.tab;
+    const tituloSecao = document.getElementById('titulo-secao-lancamentos');
+
+    if (tab === 'a_pagar') {
+      displayEntries = displayEntries.filter(e => e.type === 'saida' && e.status === 'a_pagar');
+      if (tituloSecao) tituloSecao.textContent = 'Contas a Pagar (Pendentes)';
+    } else if (tab === 'despesas') {
+      displayEntries = displayEntries.filter(e => e.type === 'saida');
+      if (tituloSecao) tituloSecao.textContent = 'Despesas & Contas';
+    } else if (tab === 'entradas') {
+      displayEntries = displayEntries.filter(e => e.type !== 'saida');
+      if (tituloSecao) tituloSecao.textContent = 'Entradas & Receitas';
+    } else if (tab === 'parcelados') {
+      displayEntries = displayEntries.filter(e => e.isInstallment);
+      if (tituloSecao) tituloSecao.textContent = 'Compras Parceladas';
+    } else if (tab === 'recorrentes') {
+      displayEntries = displayEntries.filter(e => e.isRecurrent);
+      if (tituloSecao) tituloSecao.textContent = 'Pagamentos Recorrentes / Fixos';
+    } else {
+      if (tituloSecao) tituloSecao.textContent = 'Todos os Lançamentos';
+    }
+
     const container = document.getElementById('carteira-entries-list');
     const badgeTotal = document.getElementById('badge-total-lancamentos');
-    if (badgeTotal) badgeTotal.textContent = `${balance.entries.length} entradas`;
+    if (badgeTotal) badgeTotal.textContent = `${displayEntries.length} ${displayEntries.length === 1 ? 'registro' : 'registros'}`;
 
     if (!container) return;
 
-    if (balance.entries.length === 0) {
+    if (displayEntries.length === 0) {
       container.innerHTML = `
         <div class="bg-surface-container-lowest rounded-2xl border border-dashed border-outline-variant/60 p-8 flex flex-col items-center justify-center text-center gap-2">
-          <span class="material-symbols-outlined text-4xl text-outline/60">payments</span>
-          <p class="font-body-md font-semibold text-on-surface">Nenhuma entrada no período</p>
-          <p class="font-body-sm text-xs text-on-surface-variant">Clique em "Nova Entrada" para cadastrar seu salário ou rendas extras.</p>
+          <span class="material-symbols-outlined text-4xl text-outline/60">receipt_long</span>
+          <p class="font-body-md font-semibold text-on-surface">Nenhum lançamento encontrado</p>
+          <p class="font-body-sm text-xs text-on-surface-variant">Cadastre novas despesas, receitas ou contas a pagar no botão abaixo.</p>
         </div>
       `;
       return;
     }
 
-    container.innerHTML = balance.entries.map(entry => {
-      const isRecebido = entry.status === 'recebido';
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    container.innerHTML = displayEntries.map(entry => {
+      const isSaida = entry.type === 'saida';
+      const isPago = entry.status === 'pago' || entry.status === 'recebido';
+      const isAPagar = entry.status === 'a_pagar';
+      const isAReceber = entry.status === 'a_receber';
+
       const iconMap = {
+        'Moradia': 'home',
+        'Alimentação': 'shopping_basket',
+        'Transporte': 'directions_car',
+        'Saúde': 'medical_services',
+        'Lazer': 'movie',
+        'Educação': 'school',
         'Salário': 'work',
         'Renda Extra': 'bolt',
         'Investimentos': 'trending_up',
-        'Presente': 'card_giftcard',
+        'Parcelamento': 'credit_card',
         'Outros': 'payments'
       };
-      const catIcon = iconMap[entry.category] || 'payments';
+      const catIcon = iconMap[entry.category] || (isSaida ? 'payments' : 'account_balance');
+
+      // Vencimento Status Badge
+      let badgeVencimentoHtml = '';
+      if (isSaida && isAPagar && entry.dueDate) {
+        if (entry.dueDate < todayStr) {
+          badgeVencimentoHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-error/15 text-error">🔴 Vencida</span>`;
+        } else if (entry.dueDate === todayStr) {
+          badgeVencimentoHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300">🟠 Vence hoje</span>`;
+        } else {
+          const diffDays = Math.ceil((new Date(entry.dueDate + 'T12:00:00') - new Date(todayStr + 'T12:00:00')) / (1000 * 60 * 60 * 24));
+          badgeVencimentoHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-surface-container-high text-on-surface-variant">🟡 Em ${diffDays}d</span>`;
+        }
+      }
 
       return `
         <article class="bg-surface-container-lowest rounded-2xl p-space-md border border-outline-variant/30 shadow-xs flex items-center justify-between gap-3 hover:border-outline-variant transition-all">
-          <div class="flex items-center gap-3 min-w-0">
-            <span class="w-10 h-10 rounded-xl ${isRecebido ? 'bg-secondary-container text-on-secondary-container' : 'bg-tertiary-container text-on-tertiary-container'} flex items-center justify-center shrink-0">
+          <div class="flex items-center gap-3 min-w-0 flex-1">
+            <span class="w-10 h-10 rounded-xl ${isSaida ? (isPago ? 'bg-surface-container text-outline' : 'bg-error/10 text-error') : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'} flex items-center justify-center shrink-0">
               <span class="material-symbols-outlined text-[20px]">${catIcon}</span>
             </span>
-            <div class="flex flex-col min-w-0">
-              <span class="font-body-md font-bold text-on-surface text-sm truncate">${escapeHtml(entry.description)}</span>
-              <div class="flex items-center gap-2 mt-0.5">
-                <span class="font-label-sm text-[11px] text-outline">${formatDateBR(entry.entryDate)}</span>
-                <span class="w-1 h-1 rounded-full bg-outline/40"></span>
-                <span class="font-label-sm text-[11px] ${isRecebido ? 'text-secondary font-semibold' : 'text-tertiary font-semibold'}">
-                  ${isRecebido ? 'Recebido' : 'A Receber'}
+            <div class="flex flex-col min-w-0 flex-1">
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <span class="font-body-md font-bold text-on-surface text-sm truncate ${isPago && isSaida ? 'line-through text-outline' : ''}">${escapeHtml(entry.description)}</span>
+                ${entry.isRecurrent ? `
+                  <span class="inline-flex items-center gap-0.5 text-[9px] font-bold bg-primary/10 text-primary px-1.5 py-0.5 rounded" title="Pagamento Recorrente">
+                    🔁 ${entry.recurrentPeriod || 'mensal'}
+                  </span>
+                ` : ''}
+              </div>
+              <div class="flex items-center gap-2 mt-0.5 flex-wrap">
+                <span class="font-label-sm text-[11px] text-outline">
+                  ${entry.dueDate ? `Venc: ${formatDateBR(entry.dueDate)}` : formatDateBR(entry.entryDate)}
+                </span>
+                ${badgeVencimentoHtml}
+                <span class="font-label-sm text-[11px] ${isPago ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : (isAPagar ? 'text-amber-600 dark:text-amber-400 font-bold' : 'text-secondary font-semibold')}">
+                  ${isSaida ? (isPago ? 'Pago' : 'A Pagar') : (isRecebido(entry) ? 'Recebido' : 'A Receber')}
                 </span>
               </div>
             </div>
           </div>
 
           <div class="flex items-center gap-2 shrink-0">
-            <span class="font-label-lg font-bold ${isRecebido ? 'text-secondary' : 'text-on-surface-variant'} text-sm">
-              + ${formatCurrency(entry.amount)}
-            </span>
-            <button class="btn-delete-entry w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:text-error hover:bg-error-container/30 transition-all active:scale-90" data-id="${entry.id}" title="Excluir Entrada">
+            <div class="flex flex-col items-end">
+              <span class="font-label-lg font-bold ${isSaida ? 'text-error' : 'text-emerald-600 dark:text-emerald-400'} text-sm">
+                ${isSaida ? '-' : '+'} ${formatCurrency(entry.amount)}
+              </span>
+              ${isSaida && isAPagar ? `
+                <button class="btn-dar-baixa mt-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold flex items-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" data-id="${entry.id}" title="Marcar como Pago">
+                  <span class="material-symbols-outlined text-[14px]">check</span>
+                  Dar Baixa
+                </button>
+              ` : ''}
+            </div>
+            <button class="btn-delete-entry w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:text-error hover:bg-error-container/30 transition-all active:scale-90" data-id="${entry.id}" title="Excluir Lançamento">
               <span class="material-symbols-outlined text-[18px]">delete</span>
             </button>
           </div>
@@ -391,34 +677,84 @@ export const WalletView = {
       `;
     }).join('');
 
+    // Listener dar baixa em 1 clique
+    container.querySelectorAll('.btn-dar-baixa').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const id = btn.dataset.id;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[14px]">autorenew</span>';
+
+        try {
+          const res = await walletService.markAsPaid(id);
+          showToast('✅ Conta marcada como PAGA com sucesso!', 'success');
+          if (res.nextOccurrence) {
+            showToast(`🔁 Próxima cobrança agendada para ${formatDateBR(res.nextOccurrence.dueDate)}`, 'info', 4000);
+          }
+          await this.loadData();
+          window.dispatchEvent(new CustomEvent('user-profile-updated'));
+        } catch (err) {
+          showToast('Erro ao dar baixa: ' + err.message, 'error');
+          btn.disabled = false;
+          btn.innerHTML = '<span class="material-symbols-outlined text-[14px]">check</span> Dar Baixa';
+        }
+      });
+    });
+
     // Listener exclusão
     container.querySelectorAll('.btn-delete-entry').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const id = btn.dataset.id;
-        if (confirm('Deseja realmente excluir esta entrada financeira?')) {
+        const confirmou = await showConfirmDialog({
+          title: 'Excluir Lançamento',
+          message: 'Deseja realmente remover esta movimentação financeira?',
+          confirmText: 'Excluir',
+          cancelText: 'Cancelar'
+        });
+
+        if (confirmou) {
           try {
             await walletService.deleteWalletEntry(id);
             this.walletEntries = this.walletEntries.filter(w => w.id !== id);
             this.renderBalanceAndList();
+            showToast('Lançamento excluído.', 'info');
+            window.dispatchEvent(new CustomEvent('user-profile-updated'));
           } catch (err) {
-            alert('Erro ao excluir: ' + err.message);
+            showToast('Erro ao excluir: ' + err.message, 'error');
           }
         }
       });
     });
+
+    function isRecebido(e) {
+      return e.status === 'recebido' || e.status === 'pago';
+    }
   },
 
   async handleFormSubmit() {
+    const tipoRadio = document.querySelector('input[name="transacao-tipo"]:checked');
+    const tipo = tipoRadio ? tipoRadio.value : 'entrada';
     const desc = document.getElementById('entrada-descricao').value.trim();
     const val = parseFloat(document.getElementById('entrada-valor').value);
     const cat = document.getElementById('entrada-categoria').value;
     const date = document.getElementById('entrada-data').value;
     const statusRadio = document.querySelector('input[name="entrada-status"]:checked');
-    const status = statusRadio ? statusRadio.value : 'recebido';
+    const status = statusRadio ? statusRadio.value : (tipo === 'saida' ? 'a_pagar' : 'recebido');
+
+    const isParcelado = tipo === 'saida' && Boolean(document.getElementById('check-parcelamento')?.checked);
+    const qtdParcelas = isParcelado ? parseInt(document.getElementById('select-qtd-parcelas')?.value) || 2 : 1;
+
+    const isRecorrente = tipo === 'saida' && Boolean(document.getElementById('check-recorrente')?.checked);
+    const periodoRecorrente = isRecorrente ? document.getElementById('select-periodo-recorrente')?.value || 'mensal' : 'mensal';
 
     if (!desc || !val || isNaN(val) || val <= 0) {
       showToast('Preencha a descrição e um valor numérico válido.', 'error');
+      return;
+    }
+
+    if (tipo === 'saida' && status === 'a_pagar' && !date) {
+      showToast('A data de vencimento é obrigatória para contas a pagar.', 'error');
       return;
     }
 
@@ -427,25 +763,30 @@ export const WalletView = {
     btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">autorenew</span> Salvando...';
 
     try {
-      const saved = await walletService.saveWalletEntry({
+      await walletService.saveWalletEntry({
         description: desc,
         amount: val,
+        type: tipo,
         category: cat,
-        status,
-        entryDate: date || new Date().toISOString().split('T')[0]
+        status: status,
+        dueDate: tipo === 'saida' ? date : null,
+        entryDate: date || new Date().toISOString().split('T')[0],
+        isInstallment: isParcelado,
+        installmentTotal: qtdParcelas,
+        isRecurrent: isRecorrente,
+        recurrentPeriod: periodoRecorrente
       });
 
-      this.walletEntries.unshift(saved);
       this.closeModal();
       document.getElementById('form-nova-entrada').reset();
-      this.renderBalanceAndList();
-      showToast('💰 Entrada registrada com sucesso na carteira!', 'success');
+      await this.loadData();
+      showToast(tipo === 'saida' ? (isParcelado ? `💳 Compra parcelada em ${qtdParcelas}x cadastrada!` : '🔴 Despesa registrada com sucesso!') : '💰 Entrada registrada com sucesso!', 'success');
       window.dispatchEvent(new CustomEvent('user-profile-updated'));
     } catch (err) {
-      showToast('Erro ao gravar entrada: ' + (err.message || 'Falha ao salvar'), 'error');
+      showToast('Erro ao gravar lançamento: ' + (err.message || 'Falha ao salvar'), 'error');
     } finally {
       btn.disabled = false;
-      btn.innerHTML = '<span class="material-symbols-outlined text-[20px]">save</span> Gravar na Carteira';
+      btn.innerHTML = '<span class="material-symbols-outlined text-[20px]">save</span> Gravar Lançamento';
     }
   }
 };
