@@ -2,6 +2,7 @@ import page from 'page';
 import { appStore } from '../store/appStore.js';
 import { updateUserProfile, syncDataNow, signOut, isAdmin } from '../services/authService.js';
 import { escapeHtml } from '../utils/formatters.js';
+import { showToast, showAlertDialog, showConfirmDialog } from '../utils/toast.js';
 
 export const ProfileView = {
   render() {
@@ -203,9 +204,19 @@ export const ProfileView = {
 
       try {
         const res = await syncDataNow();
-        alert(`☁️ Sincronização concluída!\n\n• ${res.listsCount} listas atualizadas\n• ${res.walletCount} entradas da carteira\n• ${res.historyCount} registros no histórico`);
+        await showAlertDialog({
+          title: 'Sincronização Concluída',
+          message: `Nuvem sincronizada com sucesso!\n\n• ${res.listsCount} listas atualizadas\n• ${res.walletCount} entradas da carteira\n• ${res.historyCount} registros no histórico`,
+          icon: 'cloud_done',
+          confirmText: 'OK'
+        });
       } catch (err) {
-        alert('Erro ao sincronizar: ' + err.message);
+        await showAlertDialog({
+          title: 'Erro de Sincronização',
+          message: 'Falha ao sincronizar: ' + (err.message || 'Erro desconhecido'),
+          icon: 'cloud_off',
+          confirmText: 'Fechar'
+        });
       } finally {
         btnSync.disabled = false;
         btnSync.innerHTML = '<span class="material-symbols-outlined text-[20px]">sync</span> Sincronizar Dados Agora';
@@ -219,7 +230,14 @@ export const ProfileView = {
 
     // Logout
     const doLogout = async () => {
-      if (confirm('Deseja realmente sair da sua conta?')) {
+      const confirmed = await showConfirmDialog({
+        title: 'Encerrar Sessão',
+        message: 'Deseja realmente desconectar sua conta deste dispositivo?',
+        icon: 'logout',
+        confirmText: 'Sair da Conta',
+        cancelText: 'Cancelar'
+      });
+      if (confirmed) {
         try {
           await signOut();
           page('/');

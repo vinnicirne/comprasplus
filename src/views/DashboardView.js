@@ -39,6 +39,7 @@ export const DashboardView = {
       const lists = await listService.getListas(user.id);
       appStore.state.lists = lists;
       this.renderLists(lists);
+      this.updateWalletSummary();
     } catch (e) {
       console.error('Failed to load lists:', e);
       const container = document.getElementById('lists-container');
@@ -65,7 +66,7 @@ export const DashboardView = {
     if (headerLabel) headerLabel.textContent = firstName;
     if (headerIcon) headerIcon.textContent = 'account_circle';
 
-    // Click no header abre perfil (placeholder por ora)
+    // Click no header abre perfil
     const btnAuth = document.getElementById('btn-header-auth');
     if (btnAuth && !btnAuth.dataset.bound) {
       btnAuth.dataset.bound = '1';
@@ -73,6 +74,28 @@ export const DashboardView = {
         import('page').then(m => m.default('/perfil')).catch(() => {});
       });
     }
+  },
+
+  async updateWalletSummary() {
+    try {
+      const { getWalletEntries, getPurchaseHistoryForWallet, calculateWalletBalance } = await import('../services/walletService.js');
+      const [entries, purchases] = await Promise.all([
+        getWalletEntries(),
+        getPurchaseHistoryForWallet()
+      ]);
+      const balance = calculateWalletBalance(entries, purchases);
+      const elSaldo = document.getElementById('dashboard-wallet-balance');
+      if (elSaldo) {
+        elSaldo.textContent = formatCurrency(balance.saldoGeralCarteira);
+        if (balance.saldoGeralCarteira < 0) {
+          elSaldo.classList.add('text-error');
+          elSaldo.classList.remove('text-secondary-fixed');
+        } else {
+          elSaldo.classList.remove('text-error');
+          elSaldo.classList.add('text-secondary-fixed');
+        }
+      }
+    } catch (_) {}
   },
 
 
@@ -99,20 +122,33 @@ export const DashboardView = {
       if (inviteCode) {
         this.openEntrarCodigoModal(inviteCode);
       }
+      if (urlParams.get('action') === 'new' || hash.includes('action=new')) {
+        this.openNovaListaModal();
+      }
     } catch (_) {}
+
+    // Atalho da Carteira no Dashboard
+    const btnCarteira = document.getElementById('btn-dashboard-ir-carteira');
+    if (btnCarteira && !btnCarteira.dataset.bound) {
+      btnCarteira.dataset.bound = '1';
+      btnCarteira.addEventListener('click', (e) => {
+        e.preventDefault();
+        page('/carteira');
+      });
+    }
     
     // Adicionar listener aos botões de filtro
     const filterBtns = document.querySelectorAll('.dashboard-filter-btn');
     filterBtns.forEach(btn => {
       btn.addEventListener('click', (e) => {
         filterBtns.forEach(b => {
-          b.classList.remove('bg-primary', 'text-on-primary', 'shadow-md');
-          b.classList.add('bg-surface-container', 'text-on-surface-variant');
+          b.classList.remove('bg-primary', 'text-on-primary', 'shadow-md', 'hover:brightness-105');
+          b.classList.add('bg-surface-container', 'text-on-surface-variant', 'hover:bg-surface-container-high', 'hover:text-on-surface');
         });
         
         const clicked = e.currentTarget;
-        clicked.classList.remove('bg-surface-container', 'text-on-surface-variant');
-        clicked.classList.add('bg-primary', 'text-on-primary', 'shadow-md');
+        clicked.classList.remove('bg-surface-container', 'text-on-surface-variant', 'hover:bg-surface-container-high', 'hover:text-on-surface');
+        clicked.classList.add('bg-primary', 'text-on-primary', 'shadow-md', 'hover:brightness-105');
         
         appStore.state.filterCategory = clicked.dataset.filter || 'TODAS';
         this.renderLists(appStore.state.lists);
@@ -180,6 +216,7 @@ export const DashboardView = {
       window.addEventListener('user-profile-updated', (e) => {
         const user = appStore.state.currentUser;
         if (user) this.updateGreeting(user);
+        this.updateWalletSummary();
       });
     }
   },
@@ -756,7 +793,7 @@ export const DashboardView = {
 
       const isOwner = !list.isShared;
       const isConcluida = list.status === 'concluida';
-      const listDateFormatted = formatDateBR(list.createdAt || new Date().toISOString());
+      const listDateFormatted = formatDateBR(list.createdAt || list.created_at || new Date().toISOString());
 
       let badgeStatus = '';
       if (isConcluida) {
@@ -899,16 +936,16 @@ export const DashboardView = {
 
           <!-- Filtros de Navegação (Pills) -->
           <nav class="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 -mx-margin px-margin snap-x snap-mandatory">
-            <button class="dashboard-filter-btn flex-shrink-0 snap-start h-8 px-3 rounded-full bg-primary text-on-primary font-label-md text-label-md flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all" data-filter="TODAS">
+            <button class="dashboard-filter-btn flex-shrink-0 snap-start h-8 px-3 rounded-full bg-primary text-on-primary font-label-md text-label-md flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all hover:brightness-105 cursor-pointer" data-filter="TODAS">
               Todas <span class="bg-on-primary/20 text-on-primary text-[10px] px-1.5 py-0.5 rounded-full" id="filter-count-all">0</span>
             </button>
-            <button class="dashboard-filter-btn flex-shrink-0 snap-start h-8 px-3 rounded-full bg-surface-container text-on-surface-variant font-label-md text-label-md flex items-center justify-center gap-1.5 active:scale-95 transition-all" data-filter="ATIVAS">
+            <button class="dashboard-filter-btn flex-shrink-0 snap-start h-8 px-3 rounded-full bg-surface-container hover:bg-surface-container-high hover:text-on-surface text-on-surface-variant font-label-md text-label-md flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer" data-filter="ATIVAS">
               Ativas <span class="bg-surface-container-highest text-on-surface-variant text-[10px] px-1.5 py-0.5 rounded-full" id="filter-count-active">0</span>
             </button>
-            <button class="dashboard-filter-btn flex-shrink-0 snap-start h-8 px-3 rounded-full bg-surface-container text-on-surface-variant font-label-md text-label-md flex items-center justify-center gap-1.5 active:scale-95 transition-all" data-filter="PENDENTES">
+            <button class="dashboard-filter-btn flex-shrink-0 snap-start h-8 px-3 rounded-full bg-surface-container hover:bg-surface-container-high hover:text-on-surface text-on-surface-variant font-label-md text-label-md flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer" data-filter="PENDENTES">
               Pendentes <span class="bg-surface-container-highest text-on-surface-variant text-[10px] px-1.5 py-0.5 rounded-full" id="filter-count-pending">0</span>
             </button>
-            <button class="dashboard-filter-btn flex-shrink-0 snap-start h-8 px-3 rounded-full bg-surface-container text-on-surface-variant font-label-md text-label-md flex items-center justify-center gap-1.5 active:scale-95 transition-all" data-filter="CONCLUIDAS">
+            <button class="dashboard-filter-btn flex-shrink-0 snap-start h-8 px-3 rounded-full bg-surface-container hover:bg-surface-container-high hover:text-on-surface text-on-surface-variant font-label-md text-label-md flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer" data-filter="CONCLUIDAS">
               Concluídas <span class="bg-surface-container-highest text-on-surface-variant text-[10px] px-1.5 py-0.5 rounded-full" id="filter-count-completed">0</span>
             </button>
           </nav>
@@ -928,8 +965,15 @@ export const DashboardView = {
                   <span class="font-numeric-hero-mobile text-numeric-hero-mobile leading-none" id="hero-total-budget">0,00</span>
                 </div>
               </div>
-              <div id="hero-saving-badge" class="px-2 py-0.5 rounded-full bg-on-primary/15 text-secondary-fixed font-semibold text-[10px] flex items-center gap-1">
-                Resta: R$ 0,00 🎉
+              <div class="flex flex-col items-end gap-1.5">
+                <div id="hero-saving-badge" class="px-2 py-0.5 rounded-full bg-on-primary/15 text-secondary-fixed font-semibold text-[10px] flex items-center gap-1">
+                  Resta: R$ 0,00 🎉
+                </div>
+                <button id="btn-dashboard-ir-carteira" type="button" class="flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/25 hover:bg-black/35 text-on-primary text-[11px] font-semibold transition-all">
+                  <span class="material-symbols-outlined text-[14px] text-secondary-fixed">account_balance_wallet</span>
+                  <span>Caixa: <strong id="dashboard-wallet-balance" class="text-secondary-fixed">R$ 0,00</strong></span>
+                  <span class="material-symbols-outlined text-[12px] opacity-70">chevron_right</span>
+                </button>
               </div>
             </div>
 

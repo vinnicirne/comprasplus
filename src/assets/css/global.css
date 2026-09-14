@@ -1659,6 +1659,11 @@ input:focus, select:focus {
   position: relative;
 }
 
+.app-nav-tab:hover {
+  color: var(--primary);
+  background-color: rgba(0, 105, 72, 0.08);
+}
+
 .app-nav-tab.active {
   color: var(--primary);
 }

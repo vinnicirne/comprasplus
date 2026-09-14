@@ -9,7 +9,26 @@ export async function getWalletEntries() {
   const user = appStore.state.currentUser;
   if (!user) return [];
 
-  // 1. Tenta buscar do Supabase
+  // 1. Se for guest, busca direto do IndexedDB local
+  if (user.id === 'guest') {
+    try {
+      const store = await getStore('carteira');
+      return new Promise((resolve) => {
+        const req = store.getAll();
+        req.onsuccess = () => {
+          const rows = req.result || [];
+          const userRows = rows.filter(r => r.userId === user.id);
+          userRows.sort((a, b) => new Date(b.entryDate || b.createdAt) - new Date(a.entryDate || a.createdAt));
+          resolve(userRows);
+        };
+        req.onerror = () => resolve([]);
+      });
+    } catch (localErr) {
+      return [];
+    }
+  }
+
+  // 2. Usuário autenticado: busca da nuvem com fallback no IndexedDB
   try {
     const { data, error } = await supabase
       .from('carteira_entradas')
@@ -17,8 +36,8 @@ export async function getWalletEntries() {
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
 
-    if (!error && data) {
-      // Salva no IndexedDB como cache local
+    if (!error && Array.isArray(data)) {
+      // Atualiza o IndexedDB local
       try {
         const store = await getStore('carteira', 'readwrite');
         for (const row of data) {
@@ -41,7 +60,7 @@ export async function getWalletEntries() {
               day: d,
               month: m,
               year: y,
-              yearMonth: row.year_month || `${y}-${String(m).padStart(2, '0')}`,
+              yearMonth: `${y}-${String(m).padStart(2, '0')}`,
               createdAt: row.created_at
             });
             req.onsuccess = () => resolve(true);
@@ -52,33 +71,89 @@ export async function getWalletEntries() {
         console.warn('Erro ao atualizar cache local da carteira:', cacheErr);
       }
 
-      return data.map(row => {
-        const entryDateStr = row.entry_date || null;
-        const parts = entryDateStr ? entryDateStr.split('-') : [];
-        const y = Number(row.year) || Number(parts[0]) || new Date().getFullYear();
-        const m = Number(row.month) || Number(parts[1]) || (new Date().getMonth() + 1);
-        const d = Number(row.day) || Number(parts[2]) || 1;
-        return {
-          id: row.id,
-          userId: row.user_id,
-          description: row.description || 'Renda',
-          amount: Number(row.amount) || 0,
-          category: row.category || 'Salário',
-          status: row.status || 'recebido',
-          entryDate: entryDateStr || `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
-          day: d,
-          month: m,
-          year: y,
-          yearMonth: row.year_month || `${y}-${String(m).padStart(2, '0')}`,
-          createdAt: row.created_at
-        };
-      });
+      // Mescla com eventuais registros locais ainda não sincronizados
+      try {
+        const store = await getStore('carteira');
+        const localRows = await new Promise((res) => {
+          const req = store.getAll();
+          req.onsuccess = () => res(req.result || []);
+          req.onerror = () => res([]);
+        });
+        const userLocals = localRows.filter(r => r.userId === user.id);
+        const cloudIds = new Set(data.map(d => d.id));
+        const unsynced = userLocals.filter(l => !cloudIds.has(l.id));
+
+        for (const uns of unsynced) {
+          supabase.from('carteira_entradas').upsert({
+            id: uns.id,
+            user_id: user.id,
+            description: uns.description,
+            amount: uns.amount,
+            category: uns.category,
+            status: uns.status,
+            entry_date: uns.entryDate,
+            day: uns.day,
+            month: uns.month,
+            year: uns.year,
+            created_at: uns.createdAt
+          }).then(() => {}).catch(() => {});
+        }
+
+        const merged = [
+          ...data.map(row => {
+            const entryDateStr = row.entry_date || null;
+            const parts = entryDateStr ? entryDateStr.split('-') : [];
+            const y = Number(row.year) || Number(parts[0]) || new Date().getFullYear();
+            const m = Number(row.month) || Number(parts[1]) || (new Date().getMonth() + 1);
+            const d = Number(row.day) || Number(parts[2]) || 1;
+            return {
+              id: row.id,
+              userId: row.user_id,
+              description: row.description || 'Renda',
+              amount: Number(row.amount) || 0,
+              category: row.category || 'Salário',
+              status: row.status || 'recebido',
+              entryDate: entryDateStr || `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
+              day: d,
+              month: m,
+              year: y,
+              yearMonth: `${y}-${String(m).padStart(2, '0')}`,
+              createdAt: row.created_at
+            };
+          }),
+          ...unsynced
+        ];
+        merged.sort((a, b) => new Date(b.entryDate || b.createdAt) - new Date(a.entryDate || a.createdAt));
+        return merged;
+      } catch (_) {
+        return data.map(row => {
+          const entryDateStr = row.entry_date || null;
+          const parts = entryDateStr ? entryDateStr.split('-') : [];
+          const y = Number(row.year) || Number(parts[0]) || new Date().getFullYear();
+          const m = Number(row.month) || Number(parts[1]) || (new Date().getMonth() + 1);
+          const d = Number(row.day) || Number(parts[2]) || 1;
+          return {
+            id: row.id,
+            userId: row.user_id,
+            description: row.description || 'Renda',
+            amount: Number(row.amount) || 0,
+            category: row.category || 'Salário',
+            status: row.status || 'recebido',
+            entryDate: entryDateStr || `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
+            day: d,
+            month: m,
+            year: y,
+            yearMonth: `${y}-${String(m).padStart(2, '0')}`,
+            createdAt: row.created_at
+          };
+        });
+      }
     }
   } catch (e) {
     console.warn('Supabase offline, lendo carteira do IndexedDB:', e);
   }
 
-  // 2. Fallback offline: lê do IndexedDB
+  // 3. Fallback offline: lê do IndexedDB
   try {
     const store = await getStore('carteira');
     return new Promise((resolve) => {
@@ -138,30 +213,31 @@ export async function saveWalletEntry(entry) {
     console.warn('Aviso: falha ao gravar carteira localmente:', err);
   }
 
-  // 2. Grava no Supabase
-  try {
-    const cloudPayload = {
-      id: record.id,
-      user_id: user.id,
-      description: record.description,
-      amount: record.amount,
-      category: record.category,
-      status: record.status,
-      entry_date: record.entryDate,
-      day: record.day,
-      month: record.month,
-      year: record.year,
-      year_month: record.yearMonth,
-      created_at: record.createdAt
-    };
+  // 2. Grava no Supabase (se não for visitante)
+  if (user.id !== 'guest') {
+    try {
+      const cloudPayload = {
+        id: record.id,
+        user_id: user.id,
+        description: record.description,
+        amount: record.amount,
+        category: record.category,
+        status: record.status,
+        entry_date: record.entryDate,
+        day: record.day,
+        month: record.month,
+        year: record.year,
+        created_at: record.createdAt
+      };
 
-    const { error } = await supabase
-      .from('carteira_entradas')
-      .upsert(cloudPayload);
+      const { error } = await supabase
+        .from('carteira_entradas')
+        .upsert(cloudPayload);
 
-    if (error) console.warn('Aviso de sync com Supabase:', error.message);
-  } catch (cloudErr) {
-    console.warn('Entrada gravada localmente, sync pendente na nuvem:', cloudErr);
+      if (error) console.warn('Aviso de sync com Supabase:', error.message);
+    } catch (cloudErr) {
+      console.warn('Entrada gravada localmente, sync pendente na nuvem:', cloudErr);
+    }
   }
 
   return record;

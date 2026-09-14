@@ -406,6 +406,7 @@ create policy "SaaS: Dono ou convidado cria compartilhamento"
 
 drop policy if exists "SaaS: Dono atualiza compartilhamentos de sua lista" on public.lista_compartilhamentos;
 drop policy if exists "SaaS: Dono ou convidado por código atualiza compartilhamento" on public.lista_compartilhamentos;
+drop policy if exists "SaaS: Dono ou convidado atualiza compartilhamento" on public.lista_compartilhamentos;
 create policy "SaaS: Dono ou convidado atualiza compartilhamento" 
   on public.lista_compartilhamentos for update 
   using (

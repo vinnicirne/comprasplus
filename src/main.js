@@ -14,10 +14,17 @@ async function init() {
 
   // Se não houver sessão Supabase mas houver modo visitante ativo, restaura
   if (!appStore.state.currentUser && localStorage.getItem('compras_plus_guest') === 'true') {
+    let savedProfile = {};
+    try {
+      savedProfile = JSON.parse(localStorage.getItem('compras_plus_guest_profile') || '{}');
+    } catch (_) {}
     appStore.state.currentUser = {
       id: 'guest',
       email: 'visitante@comprasplus.app',
-      user_metadata: { name: 'Visitante' }
+      user_metadata: {
+        name: savedProfile.name || 'Visitante',
+        phone: savedProfile.phone || ''
+      }
     };
   }
 

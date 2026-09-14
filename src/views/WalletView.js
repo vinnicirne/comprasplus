@@ -1,6 +1,7 @@
 import { appStore } from '../store/appStore.js';
 import * as walletService from '../services/walletService.js';
 import { formatCurrency, formatDateBR, escapeHtml } from '../utils/formatters.js';
+import { showToast } from '../utils/toast.js';
 
 export const WalletView = {
   currentFilter: {
@@ -249,7 +250,7 @@ export const WalletView = {
     const modal = document.getElementById('modal-nova-entrada');
     const sheet = document.getElementById('modal-nova-entrada-sheet');
     const inputDate = document.getElementById('entrada-data');
-    if (inputDate && !inputDate.value) {
+    if (inputDate) {
       inputDate.value = new Date().toISOString().split('T')[0];
     }
     if (modal && sheet) {
@@ -417,7 +418,7 @@ export const WalletView = {
     const status = statusRadio ? statusRadio.value : 'recebido';
 
     if (!desc || !val || isNaN(val) || val <= 0) {
-      alert('Preencha a descrição e um valor válido.');
+      showToast('Preencha a descrição e um valor numérico válido.', 'error');
       return;
     }
 
@@ -431,15 +432,17 @@ export const WalletView = {
         amount: val,
         category: cat,
         status,
-        entryDate: date
+        entryDate: date || new Date().toISOString().split('T')[0]
       });
 
       this.walletEntries.unshift(saved);
       this.closeModal();
       document.getElementById('form-nova-entrada').reset();
       this.renderBalanceAndList();
+      showToast('💰 Entrada registrada com sucesso na carteira!', 'success');
+      window.dispatchEvent(new CustomEvent('user-profile-updated'));
     } catch (err) {
-      alert('Erro ao gravar entrada: ' + err.message);
+      showToast('Erro ao gravar entrada: ' + (err.message || 'Falha ao salvar'), 'error');
     } finally {
       btn.disabled = false;
       btn.innerHTML = '<span class="material-symbols-outlined text-[20px]">save</span> Gravar na Carteira';
