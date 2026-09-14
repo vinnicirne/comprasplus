@@ -74,11 +74,19 @@ page('/', () => {
   }
 });
 
+function hideLoginView() {
+  const loginView = document.getElementById('view-login-inicial');
+  if (loginView) loginView.classList.add('hidden');
+  const shell = document.getElementById('main-app-shell');
+  if (shell) shell.classList.remove('hidden');
+}
+
 page('/dashboard', () => {
   if (!appStore.state.currentUser) {
     page.redirect('/');
     return;
   }
+  hideLoginView();
   const header = document.getElementById('main-app-header');
   if (header) header.classList.remove('hidden');
   updateActiveTab('/dashboard');
@@ -90,6 +98,7 @@ page('/lista/:id', (ctx) => {
     page.redirect('/');
     return;
   }
+  hideLoginView();
   updateActiveTab('');
   const header = document.getElementById('main-app-header');
   if (header) header.classList.add('hidden');
@@ -100,6 +109,7 @@ page('/lista/:id', (ctx) => {
 function guardedRoute(renderFn, navPath) {
   return () => {
     if (!appStore.state.currentUser) { page.redirect('/'); return; }
+    hideLoginView();
     const header = document.getElementById('main-app-header');
     if (header) header.classList.remove('hidden');
     updateActiveTab(navPath);

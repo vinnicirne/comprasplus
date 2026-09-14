@@ -26,6 +26,7 @@ function copyFolderRecursiveSync(source, target) {
 
   const files = fs.readdirSync(source);
   for (const file of files) {
+    if (file === '.git' || file === '.github') continue;
     const curSource = path.join(source, file);
     const curTarget = path.join(target, file);
     if (fs.lstatSync(curSource).isDirectory()) {

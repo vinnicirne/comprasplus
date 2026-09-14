@@ -1,4 +1,5 @@
 import './assets/css/global.css';
+import { appStore } from './store/appStore.js';
 import { startRouter } from './router/index.js';
 import { loadSession } from './services/authService.js';
 import { admobService } from './services/admobService.js';

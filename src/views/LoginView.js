@@ -1,4 +1,5 @@
 import page from 'page';
+import { appStore } from '../store/appStore.js';
 import { signIn, signUp, resetPassword } from '../services/authService.js';
 
 export const LoginView = {
