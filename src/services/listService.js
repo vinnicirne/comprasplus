@@ -204,3 +204,64 @@ export async function deleteLista(id) {
   return true;
 }
 
+/**
+ * Inscreve no Supabase Realtime para escutar alterações da lista específica em tempo real
+ */
+export function subscribeToList(listId, onUpdate) {
+  if (!listId || !supabase) return () => {};
+
+  const channel = supabase
+    .channel(`realtime:list:${listId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'listas',
+        filter: `id=eq.${listId}`
+      },
+      (payload) => {
+        if (payload.new && typeof onUpdate === 'function') {
+          try {
+            getStore('listas', 'readwrite').then(store => store.put(payload.new));
+          } catch (_) {}
+          onUpdate(payload.new);
+        }
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+/**
+ * Inscreve no Supabase Realtime para escutar alterações em todas as listas (Dashboard)
+ */
+export function subscribeToAllLists(userId, onListChange) {
+  if (!supabase) return () => {};
+
+  const channel = supabase
+    .channel('realtime:all_listas')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'listas'
+      },
+      (payload) => {
+        if (typeof onListChange === 'function') {
+          onListChange(payload);
+        }
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+

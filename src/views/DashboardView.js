@@ -46,6 +46,18 @@ export const DashboardView = {
       if (container) container.innerHTML = '<p class="text-error px-4">Erro ao carregar listas.</p>';
     }
 
+    // Inscrição Realtime no Dashboard para listas ao vivo
+    if (!this.unsubscribeRealtime) {
+      this.unsubscribeRealtime = listService.subscribeToAllLists(user.id, async () => {
+        try {
+          const freshLists = await listService.getListas(user.id);
+          appStore.state.lists = freshLists;
+          this.renderLists(freshLists);
+          this.updateWalletSummary();
+        } catch (_) {}
+      });
+    }
+
     // Renderiza banner oficial do Google AdMob no Dashboard como no código original
     if (window.admobManager && typeof window.admobManager.renderWebBanner === 'function') {
       window.admobManager.renderWebBanner();

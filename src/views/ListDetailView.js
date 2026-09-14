@@ -1,6 +1,6 @@
 import page from 'page';
 import { appStore } from '../store/appStore.js';
-import { getListaById, updateLista, deleteLista } from '../services/listService.js';
+import { getListaById, updateLista, deleteLista, subscribeToList } from '../services/listService.js';
 import { savePurchaseHistory } from '../services/historyService.js';
 import * as shareService from '../services/shareService.js';
 import { formatCurrency, formatDateBR, escapeHtml } from '../utils/formatters.js';
@@ -33,8 +33,14 @@ const UNITS = [
 export const ListDetailView = {
   currentList: null,
   editingItemId: null,
+  unsubscribeRealtime: null,
 
   async render(listId) {
+    if (this.unsubscribeRealtime) {
+      this.unsubscribeRealtime();
+      this.unsubscribeRealtime = null;
+    }
+
     const rv = document.getElementById('router-view');
     rv.innerHTML = `
       <div class="flex items-center justify-center h-full">
@@ -64,6 +70,21 @@ export const ListDetailView = {
     this.updateHeroStats();
     this.renderItems();
     this.attachEvents();
+
+    // Inscrição Realtime para atualizar a lista ao vivo
+    this.unsubscribeRealtime = subscribeToList(listId, (updatedList) => {
+      if (!updatedList) return;
+      this.currentList = {
+        ...this.currentList,
+        ...updatedList,
+        items: Array.isArray(updatedList.items) ? updatedList.items : (this.currentList.items || [])
+      };
+      const headerTitle = document.getElementById('detalhe-nome-header');
+      if (headerTitle) headerTitle.textContent = this.currentList.name || 'Lista';
+      this.updateHeroStats();
+      this.renderItems();
+      showToast('🔄 Lista atualizada em tempo real!', 'info', 2000);
+    });
   },
 
   getTemplate() {
@@ -837,6 +858,10 @@ export const ListDetailView = {
 
   attachEvents() {
     document.getElementById('btn-back-dashboard')?.addEventListener('click', () => {
+      if (this.unsubscribeRealtime) {
+        this.unsubscribeRealtime();
+        this.unsubscribeRealtime = null;
+      }
       page('/dashboard');
     });
 
