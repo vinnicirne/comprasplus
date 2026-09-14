@@ -246,7 +246,6 @@ export const LoginView = {
               <span>Criar minha conta</span>
               <span class="material-symbols-outlined text-[22px]">arrow_forward</span>
             </button>
-            </div>
           </form>
 
           <!-- Formulário: RECUPERAÇÃO DE SENHA -->
@@ -361,7 +360,14 @@ export const LoginView = {
                 <span>Voltar ao Login</span>
               </button>
             </div>
-            
+          </div>
+
+          <!-- Atalho: Modo Visitante / Offline -->
+          <div class="pt-4 mt-2 border-t border-outline-variant/30 flex flex-col items-center">
+            <button type="button" id="btn-login-guest" class="text-sm font-semibold text-primary hover:underline flex items-center gap-1.5 py-2 px-3 rounded-xl hover:bg-primary/5 active:scale-95 transition-all">
+              <span class="material-symbols-outlined text-[18px]">account_circle</span>
+              <span>Continuar como Visitante (Modo Offline)</span>
+            </button>
           </div>
         </div>
 
@@ -394,6 +400,16 @@ export const LoginView = {
   },
 
   attachEvents() {
+    document.getElementById('btn-login-guest')?.addEventListener('click', () => {
+      appStore.state.currentUser = {
+        id: 'guest',
+        email: 'visitante@comprasplus.app',
+        user_metadata: { name: 'Visitante' }
+      };
+      localStorage.setItem('compras_plus_guest', 'true');
+      page('/dashboard');
+    });
+
     const loginForm = document.getElementById('form-initial-login');
     if (loginForm) {
       loginForm.addEventListener('submit', async (e) => {

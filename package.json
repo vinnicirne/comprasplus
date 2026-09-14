@@ -9,7 +9,7 @@
     "dev:legacy": "npx serve -l 3000 legacy",
     "dev": "vite",
     "build:vite": "vite build",
-    "cap:sync": "node scripts/generate-env.js && node scripts/prepare-www.js && npx cap sync",
+    "cap:sync": "npm run build && npx cap sync",
     "cap:open": "npx cap open android"
   },
   "keywords": [

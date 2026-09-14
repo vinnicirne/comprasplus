@@ -58,6 +58,14 @@ function updateActiveTab(path) {
   }
 }
 
+page('', () => {
+  if (appStore.state.currentUser) {
+    page.redirect('/dashboard');
+  } else {
+    LoginView.render();
+  }
+});
+
 page('/', () => {
   if (appStore.state.currentUser) {
     page.redirect('/dashboard');
@@ -111,16 +119,12 @@ page('/admin',    guardedRoute(() => {
 }, '/admin'));
 
 page('*', () => {
-  // Mostra o shell mas indica 404 na router-view
-  const shell = document.getElementById('main-app-shell');
-  if (shell) shell.classList.remove('hidden');
-  const rv = document.getElementById('router-view');
-  if (rv) rv.innerHTML = `
-    <div class="flex flex-col items-center justify-center min-h-[60vh] gap-4 p-8 text-center">
-      <span class="material-symbols-outlined text-[60px] text-outline">error</span>
-      <h1 class="font-headline-sm text-on-surface font-bold">404</h1>
-      <p class="text-on-surface-variant">Página não encontrada</p>
-    </div>`;
+  // Redireciona para dashboard ou login em rotas desconhecidas
+  if (appStore.state.currentUser) {
+    page.redirect('/dashboard');
+  } else {
+    page.redirect('/');
+  }
 });
 
 export function startRouter() {

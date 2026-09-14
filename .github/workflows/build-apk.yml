@@ -25,10 +25,8 @@ jobs:
       - name: Instalar Dependências Node
         run: npm install
 
-      - name: Preparar Assets Web (www)
-        run: |
-          node scripts/generate-env.js
-          node scripts/prepare-www.js
+      - name: Compilar e Preparar Assets Web (dist e www)
+        run: npm run build
 
       - name: Configurar Java JDK 21
         uses: actions/setup-java@v4
