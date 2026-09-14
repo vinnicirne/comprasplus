@@ -7,6 +7,7 @@ import { WalletView } from '../views/WalletView.js';
 import { ProfileView } from '../views/ProfileView.js';
 import { AdminView } from '../views/AdminView.js';
 import { HistoryView } from '../views/HistoryView.js';
+import { AnalyticsView } from '../views/AnalyticsView.js';
 import { isAdmin } from '../services/authService.js';
 
 let closeDrawerFn = null;
@@ -149,6 +150,7 @@ function guardedRoute(renderFn, navPath) {
 }
 
 page('/carteira', guardedRoute(() => WalletView.render(),  '/carteira'));
+page('/relatorios', guardedRoute(() => AnalyticsView.render(), '/relatorios'));
 page('/historico',guardedRoute(() => HistoryView.render(), '/historico'));
 page('/perfil',   guardedRoute(() => ProfileView.render(),    '/perfil'));
 page('/admin',    guardedRoute(() => {
