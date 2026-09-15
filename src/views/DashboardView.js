@@ -66,17 +66,17 @@ export const DashboardView = {
 
   updateGreeting(user) {
     const name = user.user_metadata?.name || user.email?.split('@')[0] || 'Visitante';
-    const firstName = name.split(' ')[0];
+    const fullName = user.user_metadata?.name || name;
 
     // Greeting no dashboard
     const greeting = document.getElementById('dashboard-user-greeting');
-    if (greeting) greeting.textContent = firstName;
+    if (greeting) greeting.textContent = fullName;
 
     // Botão no header
     const headerLabel = document.getElementById('header-auth-label');
     const headerIcon = document.getElementById('header-auth-icon');
-    if (headerLabel) headerLabel.textContent = firstName;
-    if (headerIcon) headerIcon.textContent = 'account_circle';
+    if (headerLabel) headerLabel.textContent = fullName;
+    if (headerIcon) headerIcon.textContent = 'person';
 
     // Click no header abre perfil
     const btnAuth = document.getElementById('btn-header-auth');
@@ -166,13 +166,11 @@ export const DashboardView = {
     filterBtns.forEach(btn => {
       btn.addEventListener('click', (e) => {
         filterBtns.forEach(b => {
-          b.classList.remove('bg-primary', 'text-on-primary', 'shadow-md', 'hover:brightness-105');
-          b.classList.add('bg-surface-container', 'text-on-surface-variant', 'hover:bg-surface-container-high', 'hover:text-on-surface');
+          b.className = 'dashboard-filter-btn h-8 rounded-full bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 font-semibold text-[11px] sm:text-xs flex items-center justify-center active:scale-95 transition-all cursor-pointer px-1 truncate';
         });
 
         const clicked = e.currentTarget;
-        clicked.classList.remove('bg-surface-container', 'text-on-surface-variant', 'hover:bg-surface-container-high', 'hover:text-on-surface');
-        clicked.classList.add('bg-primary', 'text-on-primary', 'shadow-md', 'hover:brightness-105');
+        clicked.className = 'dashboard-filter-btn h-8 rounded-full bg-[#006948] text-white font-extrabold text-[11px] sm:text-xs flex items-center justify-center shadow-sm active:scale-95 transition-all cursor-pointer px-1 truncate';
 
         appStore.state.filterCategory = clicked.dataset.filter || 'TODAS';
         this.renderLists(appStore.state.lists);
@@ -777,10 +775,10 @@ export const DashboardView = {
       const restante = totalOrcamento - totalGasto;
       if (restante >= 0) {
         heroBadge.innerHTML = `Resta: ${formatCurrency(restante)} 🎉`;
-        heroBadge.className = "px-2 py-0.5 rounded-full bg-on-primary/15 text-secondary-fixed font-semibold text-[10px] flex items-center gap-1";
+        heroBadge.className = "px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-white font-bold text-xs flex items-center gap-1 shadow-xs";
       } else {
         heroBadge.innerHTML = `Excedido: ${formatCurrency(Math.abs(restante))} ⚠️`;
-        heroBadge.className = "px-2 py-0.5 rounded-full bg-error text-on-error font-semibold text-[10px] flex items-center gap-1";
+        heroBadge.className = "px-3 py-1 rounded-full bg-rose-500/80 backdrop-blur-md text-white font-bold text-xs flex items-center gap-1 shadow-xs";
       }
     }
 
@@ -1011,99 +1009,93 @@ export const DashboardView = {
 
   getBaseHtml() {
     return `<main id="view-dashboard" class="view flex flex-col relative w-full bg-surface min-h-screen pb-20">
-        <div class="flex flex-col w-full px-margin gap-3.5 pb-6 pt-3">
+        <div class="flex flex-col w-full px-margin gap-4 pb-6 pt-2">
         
-          <!-- Saudação e Barra de Busca -->
-          <section class="flex flex-col gap-2.5 pt-1">
-            <div class="flex items-center justify-between">
-              <div class="flex flex-col">
-                <span class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1">
-                          Olá <span id="dashboard-user-greeting">Visitante</span> 
-                          <span class="inline-block animate-bounce text-sm">👋</span>
-                </span>
-                <h1 class="font-headline-sm text-headline-sm text-on-surface tracking-tight font-bold">
-                          Controle Financeiro
-                        </h1>
-              </div>
-              <div class="flex items-center gap-2">
-                <button aria-label="Sincronizar dados com a nuvem" class="w-9 h-9 flex items-center justify-center rounded-full bg-surface-container-high text-on-surface-variant hover:text-primary active:scale-95 transition-all shadow-sm" id="btn-dashboard-sync" type="button" title="Sincronizar com a Nuvem">
-                  <span class="material-symbols-outlined text-[18px]">cloud_sync</span>
-                </button>
-                <button aria-label="Entrar em lista compartilhada" class="h-9 px-3 rounded-full bg-secondary-container text-on-secondary-container font-label-md text-xs font-semibold flex items-center gap-1 hover:bg-secondary-container/80 active:scale-95 transition-all shadow-xs" id="btn-dashboard-entrar-codigo" type="button" title="Conectar lista compartilhada por código">
-                  <span class="material-symbols-outlined text-[16px]">link</span>
-                  <span>Conectar Código</span>
-                </button>
-                <button aria-label="Abrir pesquisa de listas" class="w-9 h-9 flex items-center justify-center rounded-full bg-surface-container-high text-on-surface-variant hover:text-primary active:scale-95 transition-all shadow-sm" id="toggleSearchBtn" type="button">
-                  <span class="material-symbols-outlined text-[18px]">search</span>
-                </button>
-              </div>
-            </div>
+          <!-- Saudação e Título -->
+          <section class="flex flex-col gap-1 pt-1">
+            <span class="text-xs sm:text-sm font-bold text-[#006948] dark:text-emerald-400 flex items-center gap-1">
+              Olá, <span id="dashboard-user-greeting">Visitante</span> <span class="inline-block text-base">👋</span>
+            </span>
+            <h1 class="text-2xl sm:text-3xl font-black text-gray-900 dark:text-white tracking-tight leading-tight">
+              Minhas Listas
+            </h1>
+            <p class="text-xs text-gray-500 dark:text-gray-400 font-normal">
+              Acompanhe seus gastos no mercado e colabore em tempo real.
+            </p>
 
-            <!-- Barra de Busca Expansível -->
-            <div id="dashboard-search-bar" class="hidden flex items-center bg-surface-container-low rounded-xl px-3 py-1.5 border border-outline-variant/30 mt-1 animate-[fadeIn_0.2s_ease-out]">
-              <span class="material-symbols-outlined text-[18px] text-outline mr-2">search</span>
-              <input type="text" id="dashboard-search-input" placeholder="Buscar por lista ou loja..." class="w-full bg-transparent text-xs text-on-surface outline-none">
+            <!-- Botões de Ação Topo -->
+            <div class="flex items-center gap-2.5 mt-2">
+              <button aria-label="Entrar em lista compartilhada por código" class="flex-1 sm:flex-none h-10 px-4 rounded-2xl bg-[#c3f53c] hover:bg-[#b5eb2c] text-black font-extrabold text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-xs cursor-pointer" id="btn-dashboard-entrar-codigo" type="button">
+                <span class="material-symbols-outlined text-[18px]">link</span>
+                <span>Conectar Código</span>
+              </button>
+              <button aria-label="Criar nova lista" class="flex-1 sm:flex-none h-10 px-4 rounded-2xl bg-[#006948] hover:bg-[#005439] text-white font-extrabold text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-md cursor-pointer" id="btn-dashboard-nova-lista" type="button">
+                <span class="material-symbols-outlined text-[18px]">add</span>
+                <span>Nova Lista</span>
+              </button>
             </div>
           </section>
 
-          <!-- Filtros de Navegação (Pills) -->
-          <nav class="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 -mx-margin px-margin snap-x snap-mandatory">
-            <button class="dashboard-filter-btn flex-shrink-0 snap-start h-8 px-3 rounded-full bg-primary text-on-primary font-label-md text-label-md flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all hover:brightness-105 cursor-pointer" data-filter="TODAS">
-              Todas <span class="bg-on-primary/20 text-on-primary text-[10px] px-1.5 py-0.5 rounded-full" id="filter-count-all">0</span>
-            </button>
-            <button class="dashboard-filter-btn flex-shrink-0 snap-start h-8 px-3 rounded-full bg-surface-container hover:bg-surface-container-high hover:text-on-surface text-on-surface-variant font-label-md text-label-md flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer" data-filter="ATIVAS">
-              Ativas <span class="bg-surface-container-highest text-on-surface-variant text-[10px] px-1.5 py-0.5 rounded-full" id="filter-count-active">0</span>
-            </button>
-            <button class="dashboard-filter-btn flex-shrink-0 snap-start h-8 px-3 rounded-full bg-surface-container hover:bg-surface-container-high hover:text-on-surface text-on-surface-variant font-label-md text-label-md flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer" data-filter="PENDENTES">
-              Pendentes <span class="bg-surface-container-highest text-on-surface-variant text-[10px] px-1.5 py-0.5 rounded-full" id="filter-count-pending">0</span>
-            </button>
-            <button class="dashboard-filter-btn flex-shrink-0 snap-start h-8 px-3 rounded-full bg-surface-container hover:bg-surface-container-high hover:text-on-surface text-on-surface-variant font-label-md text-label-md flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer" data-filter="CONCLUIDAS">
-              Concluídas <span class="bg-surface-container-highest text-on-surface-variant text-[10px] px-1.5 py-0.5 rounded-full" id="filter-count-completed">0</span>
-            </button>
-          </nav>
-
           <!-- Hero Card: Visão Geral de Orçamento -->
-          <section class="bg-gradient-to-br from-primary to-primary-container rounded-2xl p-4 shadow-[0_8px_30px_-6px_rgba(0,105,72,0.5)] flex flex-col gap-4 relative overflow-hidden mt-1">
-            <div class="absolute -top-12 -right-12 w-32 h-32 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
-            <div class="absolute -bottom-16 -left-8 w-40 h-40 bg-black/10 rounded-full blur-2xl pointer-events-none"></div>
+          <section class="bg-[#006948] rounded-[26px] p-5 text-white shadow-[0_12px_28px_-6px_rgba(0,105,72,0.4)] flex flex-col justify-between relative overflow-hidden">
+            <div class="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+            <div class="absolute -bottom-10 -left-10 w-36 h-36 bg-black/10 rounded-full blur-2xl pointer-events-none"></div>
             
-            <div class="flex items-start justify-between relative z-10">
-              <div class="flex flex-col text-on-primary">
-                <span class="font-label-sm text-[12px] opacity-90 uppercase tracking-wider mb-1 flex items-center gap-1">
-                  <span class="material-symbols-outlined text-[14px]">account_balance_wallet</span> Total Previsto
-                </span>
-                <div class="flex items-baseline gap-1">
-                  <span class="font-bold text-lg opacity-80">R$</span>
-                  <span class="font-numeric-hero-mobile text-numeric-hero-mobile leading-none" id="hero-total-budget">0,00</span>
-                </div>
+            <div class="flex items-center justify-between relative z-10">
+              <div class="flex items-center gap-1.5 text-[11px] font-extrabold tracking-wider text-emerald-200 uppercase">
+                <span class="material-symbols-outlined text-[15px]">account_balance_wallet</span>
+                <span>TOTAL PREVISTO EM ORÇAMENTO</span>
               </div>
-              <div class="flex flex-col items-end gap-1.5">
-                <div id="hero-saving-badge" class="px-2 py-0.5 rounded-full bg-on-primary/15 text-secondary-fixed font-semibold text-[10px] flex items-center gap-1">
-                  Resta: R$ 0,00 🎉
-                </div>
+              <div id="hero-saving-badge" class="px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-white font-bold text-xs flex items-center gap-1 shadow-xs">
+                Resta: R$ 0,00 🎉
               </div>
             </div>
 
-            <div class="flex flex-col gap-2 relative z-10">
-              <div class="flex justify-between items-end text-on-primary">
-                <div class="flex flex-col">
-                  <span class="text-[10px] opacity-80 mb-0.5">Total Gasto</span>
-                  <span class="font-headline-sm text-headline-sm leading-none" id="hero-total-spent">R$ 0,00</span>
-                </div>
-                <div class="flex items-center gap-1 opacity-90 text-[11px] font-medium bg-black/20 px-2 py-1 rounded-lg">
-                  <span class="material-symbols-outlined text-[14px]">list_alt</span>
-                  <span id="hero-active-count">0</span> Ativas
-                </div>
-              </div>
-              
-              <div class="w-full h-2 bg-black/20 rounded-full overflow-hidden mt-1">
-                <div class="h-full bg-secondary-fixed rounded-full transition-all duration-500 ease-out shadow-[0_0_10px_rgba(172,248,71,0.6)]" id="hero-progress-bar" style="width: 0%;"></div>
-              </div>
-              <div class="flex justify-between items-center text-[10px] text-on-primary/80 font-medium px-0.5">
-                <span>Consumido</span>
-                <span><span id="hero-progress-percent">0.0</span>%</span>
+            <div class="mt-3 relative z-10">
+              <div class="text-3xl sm:text-4xl font-black text-white tracking-tight flex items-baseline gap-1">
+                <span>R$</span>
+                <span id="hero-total-budget">0,00</span>
               </div>
             </div>
+
+            <div class="w-full h-1.5 bg-black/20 rounded-full overflow-hidden mt-3 relative z-10">
+              <div class="h-full bg-[#c3f53c] rounded-full transition-all duration-500 ease-out" id="hero-progress-bar" style="width: 0%;"></div>
+            </div>
+            <span id="hero-progress-percent" class="hidden">0.0</span>
+
+            <div class="mt-3 pt-2.5 border-t border-white/15 flex items-center justify-between text-xs text-emerald-100 font-medium relative z-10">
+              <div>Total Gasto: <strong id="hero-total-spent" class="font-black text-white">R$ 0,00</strong></div>
+              <div><span id="hero-active-count" class="font-black text-white">0</span> listas ativas</div>
+            </div>
+          </section>
+
+          <!-- Barra de Busca e Botão de Atualizar -->
+          <section class="flex flex-col gap-2.5">
+            <div class="flex items-center gap-2">
+              <div class="flex-1 flex items-center bg-gray-50 dark:bg-zinc-800/80 rounded-2xl px-4 py-2.5 border border-gray-200/80 dark:border-zinc-700/80 shadow-xs focus-within:border-[#006948] focus-within:bg-white transition-all">
+                <span class="material-symbols-outlined text-[20px] text-gray-400 mr-2 shrink-0">search</span>
+                <input type="text" id="dashboard-search-input" placeholder="Buscar lista por nome ou supermercado..." class="w-full bg-transparent text-xs sm:text-sm text-gray-800 dark:text-gray-100 placeholder:text-gray-400 outline-none">
+              </div>
+              <button aria-label="Sincronizar listas" class="w-11 h-11 shrink-0 flex items-center justify-center rounded-2xl bg-white dark:bg-zinc-800 border border-gray-200/80 dark:border-zinc-700 text-gray-600 dark:text-gray-300 hover:text-[#006948] active:scale-95 transition-all shadow-xs" id="btn-dashboard-sync" type="button" title="Atualizar listas">
+                <span class="material-symbols-outlined text-[20px]">refresh</span>
+              </button>
+            </div>
+
+            <!-- Filtros de Navegação (Pills) -->
+            <nav class="grid grid-cols-4 gap-1.5 w-full py-0.5">
+              <button class="dashboard-filter-btn h-8 rounded-full bg-[#006948] text-white font-extrabold text-[11px] sm:text-xs flex items-center justify-center shadow-sm active:scale-95 transition-all cursor-pointer px-1 truncate" data-filter="TODAS">
+                Todas (<span id="filter-count-all">0</span>)
+              </button>
+              <button class="dashboard-filter-btn h-8 rounded-full bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 font-semibold text-[11px] sm:text-xs flex items-center justify-center active:scale-95 transition-all cursor-pointer px-1 truncate" data-filter="ATIVAS">
+                Ativas (<span id="filter-count-active">0</span>)
+              </button>
+              <button class="dashboard-filter-btn h-8 rounded-full bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 font-semibold text-[11px] sm:text-xs flex items-center justify-center active:scale-95 transition-all cursor-pointer px-1 truncate" data-filter="PENDENTES">
+                Pend. (<span id="filter-count-pending">0</span>)
+              </button>
+              <button class="dashboard-filter-btn h-8 rounded-full bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 font-semibold text-[11px] sm:text-xs flex items-center justify-center active:scale-95 transition-all cursor-pointer px-1 truncate" data-filter="CONCLUIDAS">
+                Concl. (<span id="filter-count-completed">0</span>)
+              </button>
+            </nav>
           </section>
 
           <!-- Listagem de Cards -->

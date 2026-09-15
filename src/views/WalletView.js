@@ -506,10 +506,28 @@ export const WalletView = {
 
   async loadData() {
     try {
-      const [entries, purchases] = await Promise.all([
+      let [entries, purchases] = await Promise.all([
         walletService.getWalletEntries(),
         walletService.getPurchaseHistoryForWallet()
       ]);
+
+      if (!entries || entries.length === 0) {
+        const seedItems = [
+          { description: 'Salário Uzabelle', amount: 1493.27, type: 'entrada', category: 'Salário', status: 'recebido', entryDate: '2026-09-13' },
+          { description: 'Bolsa Família', amount: 800.00, type: 'entrada', category: 'Outras', status: 'recebido', entryDate: '2026-09-13' },
+          { description: 'ShopeePay', amount: 113.83, type: 'entrada', category: 'Renda Extra', status: 'recebido', entryDate: '2026-09-13' },
+          { description: 'Tiktok Shop', amount: 11.12, type: 'entrada', category: 'Renda Extra', status: 'recebido', entryDate: '2026-09-13' },
+          { description: 'Tiktok Shop', amount: 10.58, type: 'entrada', category: 'Renda Extra', status: 'recebido', entryDate: '2026-09-13' }
+        ];
+
+        for (const item of seedItems) {
+          try {
+            await walletService.saveWalletEntry(item);
+          } catch (_) {}
+        }
+        entries = await walletService.getWalletEntries();
+      }
+
       this.walletEntries = entries;
       this.purchaseHistory = purchases;
       this.renderBalanceAndList();

@@ -1,20 +1,50 @@
 import { supabase } from './supabaseClient.js';
 import { getStore } from './indexedDb.js';
+import { getEffectiveUserId } from './authService.js';
 
 export async function getListas(userId) {
-  // Try Supabase first (source of truth)
+  const effectiveUserId = (userId && userId !== 'guest' && userId.includes('-')) ? userId : getEffectiveUserId();
+
+  // 1. Busca do Supabase (fonte primária da verdade)
   try {
     const { data, error } = await supabase
       .from('listas')
       .select('*')
       .order('created_at', { ascending: false });
       
-    if (!error && data) {
-      // Sync to local IndexedDB as cache
+    if (!error && Array.isArray(data)) {
+      // Atualiza o cache local no IndexedDB
       try {
         const store = await getStore('listas', 'readwrite');
         data.forEach(l => store.put(l));
       } catch (e) { /* ignore sync error */ }
+
+      // Se houver listas criadas localmente que ainda não foram enviadas ao Supabase, envia agora
+      try {
+        const store = await getStore('listas');
+        const localLists = await new Promise((res) => {
+          const req = store.getAll();
+          req.onsuccess = () => res(req.result || []);
+          req.onerror = () => res([]);
+        });
+        const cloudIds = new Set(data.map(d => d.id));
+        const unsynced = localLists.filter(l => !cloudIds.has(l.id));
+
+        for (const un of unsynced) {
+          const payload = sanitizePayload({
+            ...un,
+            user_id: effectiveUserId,
+            owner_id: effectiveUserId
+          });
+          try {
+            const { error: insErr } = await supabase.from('listas').insert([payload]);
+            if (!insErr) {
+              data.push(payload);
+            }
+          } catch (_) {}
+        }
+      } catch (_) {}
+
       return data;
     }
   } catch (e) {
@@ -25,7 +55,7 @@ export async function getListas(userId) {
   try {
     const store = await getStore('listas');
     return new Promise((resolve, reject) => {
-      const req = store.index('userId').getAll(userId);
+      const req = store.getAll();
       req.onsuccess = () => resolve(req.result || []);
       req.onerror = () => reject(req.error);
     });
@@ -51,13 +81,21 @@ function sanitizePayload(obj) {
 }
 
 export async function createLista(listaData) {
+  const effectiveUserId = getEffectiveUserId();
+  const rawUserId = (listaData.user_id && listaData.user_id !== 'guest' && listaData.user_id.includes('-')) ? listaData.user_id : effectiveUserId;
+  const rawOwnerId = (listaData.owner_id && listaData.owner_id !== 'guest' && listaData.owner_id.includes('-')) ? listaData.owner_id : rawUserId;
+
   const fullData = {
     id: listaData.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'lista_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9)),
-    owner_id: listaData.owner_id || listaData.user_id,
+    user_id: rawUserId,
+    owner_id: rawOwnerId,
     owner_name: listaData.owner_name || null,
     owner_email: listaData.owner_email || null,
     ...listaData
   };
+  fullData.user_id = rawUserId;
+  fullData.owner_id = rawOwnerId;
+
   const payload = sanitizePayload(fullData);
 
   let data = null;

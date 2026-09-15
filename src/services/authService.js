@@ -81,6 +81,23 @@ export function isAdmin(user = appStore.state.currentUser) {
   return false;
 }
 
+export function getEffectiveUserId() {
+  const user = appStore.state.currentUser;
+  if (user && user.id && user.id !== 'guest' && user.id.includes('-')) {
+    return user.id;
+  }
+  try {
+    let devId = localStorage.getItem('compras_plus_device_uuid');
+    if (!devId || !devId.includes('-')) {
+      devId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'a0000000-0000-4000-8000-000000000001';
+      localStorage.setItem('compras_plus_device_uuid', devId);
+    }
+    return devId;
+  } catch (_) {
+    return 'a0000000-0000-4000-8000-000000000001';
+  }
+}
+
 export async function updateUserProfile({ name, phone }) {
   const user = appStore.state.currentUser;
   if (!user) throw new Error('Usuário não autenticado.');

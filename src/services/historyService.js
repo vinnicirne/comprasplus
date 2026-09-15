@@ -1,19 +1,19 @@
 import { supabase } from './supabaseClient.js';
 import { getStore } from './indexedDb.js';
 import { appStore } from '../store/appStore.js';
+import { getEffectiveUserId } from './authService.js';
 
 /**
- * Salva uma compra no Histórico Oficial (IndexedDB + Supabase)
+ * Salva uma compra no Histórico Oficial (Supabase como fonte primária + cache IndexedDB)
  */
 export async function savePurchaseHistory(record) {
-  const user = appStore.state.currentUser;
-  if (!user) throw new Error('Você precisa estar autenticado para registrar compras no histórico.');
+  const effectiveUserId = getEffectiveUserId();
 
   const now = record.purchasedAt ? new Date(record.purchasedAt) : new Date();
   const id = record.id || ('compra_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now());
   const historyItem = {
     id,
-    userId: user.id,
+    userId: effectiveUserId,
     listId: record.listId || null,
     listName: record.listName || 'Compras Diversas',
     category: record.category || 'Mercado',
@@ -44,7 +44,7 @@ export async function savePurchaseHistory(record) {
   try {
     const payload = {
       id: historyItem.id,
-      user_id: user.id,
+      user_id: effectiveUserId,
       list_id: historyItem.listId,
       list_name: historyItem.listName,
       category: historyItem.category,
@@ -76,15 +76,15 @@ export async function savePurchaseHistory(record) {
  * Consulta todas as compras do histórico
  */
 export async function getPurchaseHistory() {
-  const user = appStore.state.currentUser;
-  if (!user) return [];
+  const effectiveUserId = getEffectiveUserId();
+  if (!effectiveUserId) return [];
 
-  // 1. Tenta buscar da nuvem
+  // 1. Tenta buscar da nuvem Supabase
   try {
     const { data, error } = await supabase
       .from('historico_compras')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', effectiveUserId)
       .order('purchased_at', { ascending: false });
 
     if (!error && data) {

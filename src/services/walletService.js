@@ -1,47 +1,29 @@
 import { supabase } from './supabaseClient.js';
 import { getStore } from './indexedDb.js';
 import { appStore } from '../store/appStore.js';
+import { getEffectiveUserId } from './authService.js';
 
 /**
- * Busca entradas financeiras da carteira (Supabase + cache IndexedDB)
+ * Busca entradas financeiras da carteira (Supabase como fonte primária + cache IndexedDB)
  */
 export async function getWalletEntries() {
-  const user = appStore.state.currentUser;
-  if (!user) return [];
+  const effectiveUserId = getEffectiveUserId();
+  if (!effectiveUserId) return [];
 
-  // 1. Se for guest, busca direto do IndexedDB local
-  if (user.id === 'guest') {
-    try {
-      const store = await getStore('carteira');
-      return new Promise((resolve) => {
-        const req = store.getAll();
-        req.onsuccess = () => {
-          const rows = req.result || [];
-          const userRows = rows.filter(r => r.userId === user.id);
-          userRows.sort((a, b) => new Date(b.entryDate || b.createdAt) - new Date(a.entryDate || a.createdAt));
-          resolve(userRows);
-        };
-        req.onerror = () => resolve([]);
-      });
-    } catch (localErr) {
-      return [];
-    }
-  }
-
-  // 2. Usuário autenticado: busca da nuvem com fallback no IndexedDB
+  // 1. Busca da nuvem (Supabase como fonte da verdade)
   try {
     const { data, error } = await supabase
       .from('carteira_entradas')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', effectiveUserId)
       .order('created_at', { ascending: false });
 
     if (!error && Array.isArray(data)) {
-      // Atualiza o IndexedDB local
+      // Atualiza o IndexedDB local como cache
       try {
         const store = await getStore('carteira', 'readwrite');
         for (const row of data) {
-            const entryDateStr = row.entry_date || null;
+          const entryDateStr = row.entry_date || null;
           const parts = entryDateStr ? entryDateStr.split('-') : [];
           const y = Number(row.year) || Number(parts[0]) || new Date().getFullYear();
           const m = Number(row.month) || Number(parts[1]) || (new Date().getMonth() + 1);
@@ -52,7 +34,7 @@ export async function getWalletEntries() {
             const req = store.put({
               id: row.id,
               userId: row.user_id,
-              description: row.description,
+              description: row.title || row.description,
               amount: Number(row.amount) || 0,
               type: row.type || 'entrada',
               category: row.category,
@@ -81,7 +63,7 @@ export async function getWalletEntries() {
         console.warn('Erro ao atualizar cache local da carteira:', cacheErr);
       }
 
-      // Mescla com eventuais registros locais ainda não sincronizados
+      // Mescla com eventuais registros locais ainda não sincronizados para a nuvem
       try {
         const store = await getStore('carteira');
         const localRows = await new Promise((res) => {
@@ -89,15 +71,15 @@ export async function getWalletEntries() {
           req.onsuccess = () => res(req.result || []);
           req.onerror = () => res([]);
         });
-        const userLocals = localRows.filter(r => r.userId === user.id);
+        const userLocals = localRows.filter(r => r.userId === effectiveUserId || r.userId === 'guest');
         const cloudIds = new Set(data.map(d => d.id));
         const unsynced = userLocals.filter(l => !cloudIds.has(l.id));
 
-        const upsertPromises = unsynced.map(uns => {
+        for (const uns of unsynced) {
           const cloudPayload = {
             id: uns.id,
-            user_id: user.id,
-            description: uns.description,
+            user_id: effectiveUserId,
+            title: uns.description,
             amount: Number(uns.amount) || 0,
             type: uns.type || 'entrada',
             category: uns.category || (uns.type === 'saida' ? 'Geral' : 'Salário'),
@@ -118,123 +100,67 @@ export async function getWalletEntries() {
             created_at: uns.createdAt || new Date().toISOString()
           };
 
-          return supabase.from('carteira_entradas').upsert(cloudPayload).then(({ error }) => {
-            if (error) {
-              if (error.code === 'PGRST204' || error.message?.includes('column')) {
-                 const fallbackPayload = {
-                   id: cloudPayload.id,
-                   user_id: cloudPayload.user_id,
-                   description: cloudPayload.description,
-                   amount: cloudPayload.amount,
-                   category: cloudPayload.category,
-                   status: cloudPayload.status,
-                   entry_date: cloudPayload.entry_date,
-                   day: cloudPayload.day,
-                   month: cloudPayload.month,
-                   year: cloudPayload.year,
-                   created_at: cloudPayload.created_at
-                 };
-                 return supabase.from('carteira_entradas').upsert(fallbackPayload).then(({ error: fbErr }) => {
-                    if (fbErr) console.error('Erro no fallback do sync', uns.id, fbErr.message);
-                 });
-              } else {
-                 console.error('Erro ao sync entrada', uns.id, error.message);
-              }
+          try {
+            const { error: upErr } = await supabase.from('carteira_entradas').upsert(cloudPayload);
+            if (!upErr) {
+              data.push(cloudPayload);
             }
-          }).catch(err => console.error('Falha catch no sync', err));
-        });
+          } catch (_) {}
+        }
+      } catch (_) {}
 
-        await Promise.all(upsertPromises);
-
-        const merged = [
-          ...data.map(row => {
-            const entryDateStr = row.entry_date || null;
-            const parts = entryDateStr ? entryDateStr.split('-') : [];
-            const y = Number(row.year) || Number(parts[0]) || new Date().getFullYear();
-            const m = Number(row.month) || Number(parts[1]) || (new Date().getMonth() + 1);
-            const d = Number(row.day) || Number(parts[2]) || 1;
-            return {
-              id: row.id,
-              userId: row.user_id,
-              description: row.description || (row.type === 'saida' ? 'Despesa' : 'Renda'),
-              amount: Number(row.amount) || 0,
-              type: row.type || 'entrada',
-              category: row.category || (row.type === 'saida' ? 'Geral' : 'Salário'),
-              status: row.status || (row.type === 'saida' ? 'a_pagar' : 'recebido'),
-              dueDate: row.due_date || null,
-              paidAt: row.paid_at || null,
-              isRecurrent: Boolean(row.is_recurrent),
-              recurrentPeriod: row.recurrent_period || 'mensal',
-              isInstallment: Boolean(row.is_installment),
-              installmentCurrent: row.installment_current || null,
-              installmentTotal: row.installment_total || null,
-              parentId: row.parent_id || null,
-              relatedListId: row.related_list_id || null,
-              entryDate: entryDateStr || `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
-              day: d,
-              month: m,
-              year: y,
-              yearMonth: `${y}-${String(m).padStart(2, '0')}`,
-              createdAt: row.created_at
-            };
-          }),
-          ...unsynced
-        ];
-        merged.sort((a, b) => new Date(b.dueDate || b.entryDate || b.createdAt) - new Date(a.dueDate || a.entryDate || a.createdAt));
-        return merged;
-      } catch (_) {
-        return data.map(row => {
-          const entryDateStr = row.entry_date || null;
-          const parts = entryDateStr ? entryDateStr.split('-') : [];
-          const y = Number(row.year) || Number(parts[0]) || new Date().getFullYear();
-          const m = Number(row.month) || Number(parts[1]) || (new Date().getMonth() + 1);
-          const d = Number(row.day) || Number(parts[2]) || 1;
-          return {
-            id: row.id,
-            userId: row.user_id,
-            description: row.description || (row.type === 'saida' ? 'Despesa' : 'Renda'),
-            amount: Number(row.amount) || 0,
-            type: row.type || 'entrada',
-            category: row.category || (row.type === 'saida' ? 'Geral' : 'Salário'),
-            status: row.status || (row.type === 'saida' ? 'a_pagar' : 'recebido'),
-            dueDate: row.due_date || null,
-            paidAt: row.paid_at || null,
-            isRecurrent: Boolean(row.is_recurrent),
-            recurrentPeriod: row.recurrent_period || 'mensal',
-            isInstallment: Boolean(row.is_installment),
-            installmentCurrent: row.installment_current || null,
-            installmentTotal: row.installment_total || null,
-            parentId: row.parent_id || null,
-            relatedListId: row.related_list_id || null,
-            entryDate: entryDateStr || `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
-            day: d,
-            month: m,
-            year: y,
-            yearMonth: `${y}-${String(m).padStart(2, '0')}`,
-            createdAt: row.created_at
-          };
-        });
-      }
+      // Retorna os dados mapeados do Supabase
+      return data.map(row => {
+        const entryDateStr = row.entry_date || null;
+        const parts = entryDateStr ? entryDateStr.split('-') : [];
+        const y = Number(row.year) || Number(parts[0]) || new Date().getFullYear();
+        const m = Number(row.month) || Number(parts[1]) || (new Date().getMonth() + 1);
+        const d = Number(row.day) || Number(parts[2]) || 1;
+        const entryDate = entryDateStr || `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        return {
+          id: row.id,
+          userId: row.user_id,
+          description: row.title || row.description,
+          amount: Number(row.amount) || 0,
+          type: row.type || 'entrada',
+          category: row.category,
+          status: row.status || (row.type === 'saida' ? 'a_pagar' : 'recebido'),
+          dueDate: row.due_date || null,
+          paidAt: row.paid_at || null,
+          isRecurrent: Boolean(row.is_recurrent),
+          recurrentPeriod: row.recurrent_period || 'mensal',
+          isInstallment: Boolean(row.is_installment),
+          installmentCurrent: row.installment_current || null,
+          installmentTotal: row.installment_total || null,
+          parentId: row.parent_id || null,
+          relatedListId: row.related_list_id || null,
+          entryDate,
+          day: d,
+          month: m,
+          year: y,
+          yearMonth: `${y}-${String(m).padStart(2, '0')}`,
+          createdAt: row.created_at
+        };
+      });
     }
-  } catch (e) {
-    console.warn('Supabase offline, lendo carteira do IndexedDB:', e);
+  } catch (cloudErr) {
+    console.warn('Supabase offline para carteira, buscando IndexedDB:', cloudErr);
   }
 
-  // 3. Fallback offline: lê do IndexedDB
+  // Fallback offline do IndexedDB
   try {
     const store = await getStore('carteira');
     return new Promise((resolve) => {
       const req = store.getAll();
       req.onsuccess = () => {
         const rows = req.result || [];
-        const userRows = rows.filter(r => r.userId === user.id);
-        userRows.sort((a, b) => new Date(b.dueDate || b.entryDate || b.createdAt) - new Date(a.dueDate || a.entryDate || a.createdAt));
+        const userRows = rows.filter(r => r.userId === effectiveUserId || r.userId === 'guest');
+        userRows.sort((a, b) => new Date(b.entryDate || b.createdAt) - new Date(a.entryDate || a.createdAt));
         resolve(userRows);
       };
       req.onerror = () => resolve([]);
     });
-  } catch (localErr) {
-    console.error('Falha ao ler carteira local:', localErr);
+  } catch (_) {
     return [];
   }
 }
@@ -243,8 +169,8 @@ export async function getWalletEntries() {
  * Grava uma ou várias entradas financeiras (suporta parcelamento e recorrência)
  */
 export async function saveWalletEntry(entry) {
-  const user = appStore.state.currentUser;
-  if (!user) throw new Error('Usuário não autenticado.');
+  const effectiveUserId = getEffectiveUserId();
+  if (!effectiveUserId) throw new Error('Usuário não autenticado.');
 
   const type = entry.type || 'entrada';
   const totalAmount = Number(entry.amount) || 0;
@@ -274,7 +200,7 @@ export async function saveWalletEntry(entry) {
 
       recordsToSave.push({
         id: 'wall_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now() + `_${i}`,
-        userId: user.id,
+        userId: effectiveUserId,
         description: `${entry.description || 'Despesa'} (${i}/${installmentTotal})`,
         amount: installmentAmount,
         type: 'saida',
@@ -311,7 +237,7 @@ export async function saveWalletEntry(entry) {
 
     recordsToSave.push({
       id,
-      userId: user.id,
+      userId: effectiveUserId,
       description: entry.description || (type === 'saida' ? 'Despesa' : 'Renda'),
       amount: totalAmount,
       type,
@@ -349,58 +275,56 @@ export async function saveWalletEntry(entry) {
     console.warn('Aviso: falha ao gravar carteira localmente:', err);
   }
 
-  // 2. Grava no Supabase com fallback gracioso se colunas novas não estiverem presentes
-  if (user.id !== 'guest') {
-    for (const rec of recordsToSave) {
-      try {
-        const cloudPayload = {
+  // 1. Grava PRIMEIRO no Supabase (Database-First)
+  for (const rec of recordsToSave) {
+    try {
+      const cloudPayload = {
+        id: rec.id,
+        user_id: effectiveUserId,
+        title: rec.description,
+        amount: rec.amount,
+        type: rec.type,
+        category: rec.category,
+        status: rec.status,
+        due_date: rec.dueDate,
+        paid_at: rec.paidAt,
+        is_recurrent: rec.isRecurrent,
+        recurrent_period: rec.recurrentPeriod,
+        is_installment: rec.isInstallment,
+        installment_current: rec.installmentCurrent,
+        installment_total: rec.installmentTotal,
+        parent_id: rec.parentId,
+        related_list_id: rec.relatedListId,
+        entry_date: rec.entryDate,
+        day: rec.day,
+        month: rec.month,
+        year: rec.year,
+        created_at: rec.createdAt
+      };
+
+      let { error } = await supabase
+        .from('carteira_entradas')
+        .upsert(cloudPayload);
+
+      // Fallback: se Supabase acusar coluna inexistente, salva campos básicos
+      if (error && (error.code === 'PGRST204' || error.message?.includes('column'))) {
+        const fallbackPayload = {
           id: rec.id,
-          user_id: user.id,
-          description: rec.description,
+          user_id: effectiveUserId,
+          title: rec.description,
           amount: rec.amount,
-          type: rec.type,
           category: rec.category,
           status: rec.status,
-          due_date: rec.dueDate,
-          paid_at: rec.paidAt,
-          is_recurrent: rec.isRecurrent,
-          recurrent_period: rec.recurrentPeriod,
-          is_installment: rec.isInstallment,
-          installment_current: rec.installmentCurrent,
-          installment_total: rec.installmentTotal,
-          parent_id: rec.parentId,
-          related_list_id: rec.relatedListId,
           entry_date: rec.entryDate,
           day: rec.day,
           month: rec.month,
           year: rec.year,
           created_at: rec.createdAt
         };
-
-        let { error } = await supabase
-          .from('carteira_entradas')
-          .upsert(cloudPayload);
-
-        // Fallback: se Supabase acusar coluna inexistente, salva campos básicos
-        if (error && (error.code === 'PGRST204' || error.message?.includes('column'))) {
-          const fallbackPayload = {
-            id: rec.id,
-            user_id: user.id,
-            description: rec.description,
-            amount: rec.amount,
-            category: rec.category,
-            status: rec.status,
-            entry_date: rec.entryDate,
-            day: rec.day,
-            month: rec.month,
-            year: rec.year,
-            created_at: rec.createdAt
-          };
-          await supabase.from('carteira_entradas').upsert(fallbackPayload);
-        }
-      } catch (cloudErr) {
-        console.warn('Entrada gravada localmente, sync na nuvem falhou:', cloudErr);
+        await supabase.from('carteira_entradas').upsert(fallbackPayload);
       }
+    } catch (cloudErr) {
+      console.warn('Erro ao gravar no Supabase:', cloudErr);
     }
   }
 
@@ -449,37 +373,35 @@ export async function updateWalletEntry(id, payload) {
     console.warn('Erro ao atualizar IndexedDB:', e);
   }
 
-  // Atualiza na Nuvem (se logado real)
-  if (user.id !== 'guest') {
-    try {
-      const cloudPayload = {
-        id: updated.id,
-        user_id: updated.userId,
-        description: updated.description,
-        amount: updated.amount,
-        type: updated.type,
-        category: updated.category,
-        status: updated.status,
-        due_date: updated.dueDate,
-        paid_at: updated.paidAt,
-        is_recurrent: updated.isRecurrent,
-        recurrent_period: updated.recurrentPeriod,
-        is_installment: updated.isInstallment,
-        installment_current: updated.installmentCurrent,
-        installment_total: updated.installmentTotal,
-        parent_id: updated.parentId,
-        related_list_id: updated.relatedListId,
-        entry_date: updated.entryDate,
-        day: updated.day,
-        month: updated.month,
-        year: updated.year,
-        created_at: updated.createdAt
-      };
+  // Atualiza na Nuvem Supabase
+  try {
+    const cloudPayload = {
+      id: updated.id,
+      user_id: getEffectiveUserId(),
+      title: updated.description,
+      amount: updated.amount,
+      type: updated.type,
+      category: updated.category,
+      status: updated.status,
+      due_date: updated.dueDate,
+      paid_at: updated.paidAt,
+      is_recurrent: updated.isRecurrent,
+      recurrent_period: updated.recurrentPeriod,
+      is_installment: updated.isInstallment,
+      installment_current: updated.installmentCurrent,
+      installment_total: updated.installmentTotal,
+      parent_id: updated.parentId,
+      related_list_id: updated.relatedListId,
+      entry_date: updated.entryDate,
+      day: updated.day,
+      month: updated.month,
+      year: updated.year,
+      created_at: updated.createdAt
+    };
 
-      await supabase.from('carteira_entradas').upsert(cloudPayload);
-    } catch (cloudErr) {
-      console.warn('Erro ao atualizar na nuvem:', cloudErr);
-    }
+    await supabase.from('carteira_entradas').upsert(cloudPayload);
+  } catch (cloudErr) {
+    console.warn('Erro ao atualizar no Supabase:', cloudErr);
   }
 
   return updated;
@@ -554,15 +476,13 @@ export async function markAsPaid(id) {
   } catch (_) {}
 
   // Atualiza no Supabase
-  if (user.id !== 'guest') {
-    try {
-      await supabase.from('carteira_entradas').update({
-        status: 'pago',
-        paid_at: nowIso
-      }).eq('id', id);
-    } catch (e) {
-      console.warn('Erro ao atualizar status pago no Supabase:', e);
-    }
+  try {
+    await supabase.from('carteira_entradas').update({
+      status: 'pago',
+      paid_at: nowIso
+    }).eq('id', id);
+  } catch (e) {
+    console.warn('Erro ao atualizar status pago no Supabase:', e);
   }
 
   // 2. Se for RECORRENTE, gerar a PRÓXIMA ocorrência
@@ -626,8 +546,7 @@ export async function deleteWalletEntry(id) {
     const { error } = await supabase
       .from('carteira_entradas')
       .delete()
-      .eq('id', id)
-      .eq('user_id', user.id);
+      .eq('id', id);
 
     if (error) console.warn('Aviso de sync ao deletar no Supabase:', error.message);
   } catch (cloudErr) {
