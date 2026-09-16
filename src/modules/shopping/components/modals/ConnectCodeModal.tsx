@@ -29,39 +29,18 @@ export const ConnectCodeModal: React.FC<ConnectCodeModalProps> = ({ open, onOpen
     setError('');
 
     try {
-      // 1. Look up list by share_code
-      const { data: lists, error: fetchError } = await supabase
-        .from('shopping_lists')
-        .select('*')
-        .eq('share_code', code.trim().toUpperCase())
-        .limit(1);
+      // 1. Chamar a RPC segura que adiciona o usuário à lista (bypassing RLS do SELECT)
+      const { data: list, error: rpcError } = await supabase
+        .rpc('join_shopping_list', {
+          p_share_code: code.trim().toUpperCase(),
+          p_permission: permission,
+          p_user_name: user?.user_metadata?.name || user?.email || 'Visitante'
+        });
 
-      if (fetchError || !lists || lists.length === 0) {
+      if (rpcError || !list) {
         setError('Código não encontrado. Verifique e tente novamente.');
         setIsLoading(false);
         return;
-      }
-
-      const list = lists[0];
-
-      // 2. Add current user to shared_users with the selected permission
-      const currentSharedUsers: { id: string; permission: string; name?: string }[] = list.shared_users || [];
-      const alreadyJoinedIndex = currentSharedUsers.findIndex(u => u.id === user?.id);
-
-      if (user) {
-        let updatedUsers = [...currentSharedUsers];
-        if (alreadyJoinedIndex >= 0) {
-          updatedUsers[alreadyJoinedIndex].permission = permission;
-        } else {
-          updatedUsers = [
-            ...updatedUsers,
-            { id: user.id, permission, name: user.user_metadata?.name || user.email }
-          ];
-        }
-        await supabase
-          .from('shopping_lists')
-          .update({ shared_users: updatedUsers })
-          .eq('id', list.id);
       }
 
       // 3. Add list to local store and navigate
