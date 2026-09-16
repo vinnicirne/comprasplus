@@ -22,7 +22,7 @@ function AppContent() {
   }
 
   return (
-    <>
+    <AppLayout>
       {currentView === 'DASHBOARD' && <DashboardView />}
       {currentView === 'LIST' && <ListView />}
       {currentView === 'FINANCE' && <FinanceView />}
@@ -30,7 +30,7 @@ function AppContent() {
       {currentView === 'HISTORY' && <HistoryView />}
       {currentView === 'PROFILE' && <ProfileView />}
       {currentView === 'RANKING' && <RankingView />}
-    </>
+    </AppLayout>
   );
 }
 
@@ -49,9 +49,7 @@ function App() {
     <AuthProvider>
       {showSplash && <SplashScreen onComplete={handleSplashComplete} />}
       <div className="w-full max-w-[600px] mx-auto min-h-screen flex flex-col relative shadow-2xl bg-background overflow-hidden">
-        <AppLayout>
-          <AppContent />
-        </AppLayout>
+        <AppContent />
       </div>
     </AuthProvider>
   );
