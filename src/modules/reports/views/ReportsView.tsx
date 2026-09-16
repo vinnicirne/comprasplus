@@ -3,7 +3,7 @@ import { useListStore } from '../../shopping/store/useListStore';
 import { useFinanceStore } from '../../finance/store/useFinanceStore';
 import { BarChart2, PieChart as PieChartIcon, TrendingUp, AlertCircle, ShoppingCart, Wallet } from 'lucide-react';
 import { formatCurrency } from '../../../core/utils/currency';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { clsx } from 'clsx';
 
 // Cores do Design System (inspirado no global.css)

@@ -158,15 +158,7 @@ export const DashboardView: React.FC = () => {
         </section>
       </div>
 
-      <div className="fixed right-4 bottom-24 z-40 flex justify-end pointer-events-none">
-        <button 
-          onClick={() => setIsNovaListaOpen(true)}
-          className="pointer-events-auto flex items-center gap-1.5 h-11 px-4 rounded-full bg-gradient-to-r from-primary to-primary-container text-on-primary font-label-md text-label-md shadow-lg hover:shadow-xl active:scale-95 transition-all transform hover:-translate-y-0.5"
-        >
-          <Plus size={20} />
-          <span className="font-bold">Nova Lista</span>
-        </button>
-      </div>
+
 
       <NovaListaModal 
         open={isNovaListaOpen} 
