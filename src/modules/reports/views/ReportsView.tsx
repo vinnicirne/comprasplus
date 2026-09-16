@@ -1,34 +1,56 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useListStore } from '../../shopping/store/useListStore';
-import { BarChart2, PieChart as PieChartIcon, TrendingUp, AlertCircle } from 'lucide-react';
+import { useFinanceStore } from '../../finance/store/useFinanceStore';
+import { BarChart2, PieChart as PieChartIcon, TrendingUp, AlertCircle, ShoppingCart, Wallet } from 'lucide-react';
 import { formatCurrency } from '../../../core/utils/currency';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { clsx } from 'clsx';
 
 // Cores do Design System (inspirado no global.css)
 const COLORS = ['#006948', '#acf847', '#416900', '#00855d', '#85f8c4'];
 
 export const ReportsView: React.FC = () => {
+  const [viewMode, setViewMode] = useState<'MARKET' | 'WALLET'>('MARKET');
+  
   const { lists } = useListStore();
+  const { transactions, fetchTransactions } = useFinanceStore();
 
-  // 1. Filtrar apenas listas concluídas
-  const completedLists = lists.filter(l => l.status === 'concluida');
+  useEffect(() => {
+    fetchTransactions();
+  }, [fetchTransactions]);
 
-  // 2. Calcular gasto total (apenas itens com preço nas listas concluídas)
   let totalGasto = 0;
   const categoryTotals: Record<string, number> = {};
+  let totalItemsCount = 0;
+  
+  if (viewMode === 'MARKET') {
+    // 1. Filtrar apenas listas concluídas
+    const completedLists = lists.filter(l => l.status === 'concluida');
+    totalItemsCount = completedLists.length;
 
-  completedLists.forEach(list => {
-    (list.items || []).forEach(item => {
-      // Considerando itens marcados (comprados) que possuem preço
-      if (item.checked && item.price && item.price > 0) {
-        const itemTotal = item.price * (item.quantity || 1);
-        totalGasto += itemTotal;
+    completedLists.forEach(list => {
+      (list.items || []).forEach(item => {
+        // Considerando itens marcados (comprados) que possuem preço
+        if (item.checked && item.price && item.price > 0) {
+          const itemTotal = item.price * (item.quantity || 1);
+          totalGasto += itemTotal;
 
-        const cat = (item.category || 'Outros').toLowerCase();
-        categoryTotals[cat] = (categoryTotals[cat] || 0) + itemTotal;
-      }
+          const cat = (item.category || 'Outros').toLowerCase();
+          categoryTotals[cat] = (categoryTotals[cat] || 0) + itemTotal;
+        }
+      });
     });
-  });
+  } else {
+    // Modo Carteira (Apenas Despesas Pagas)
+    const paidExpenses = transactions.filter(t => t.type === 'EXPENSE' && t.status === 'PAID');
+    totalItemsCount = paidExpenses.length;
+
+    paidExpenses.forEach(t => {
+      totalGasto += t.amount;
+      const cat = (t.category || 'Outros').toLowerCase();
+      categoryTotals[cat] = (categoryTotals[cat] || 0) + t.amount;
+    });
+  }
 
   // 3. Preparar dados para o gráfico de rosca (Recharts)
   const chartData = Object.keys(categoryTotals).map(key => ({
@@ -38,14 +60,36 @@ export const ReportsView: React.FC = () => {
 
   return (
     <div className="flex flex-col w-full min-h-screen bg-surface pb-24 px-margin pt-2">
-      <section className="flex flex-col gap-1 pt-1 mb-6">
+      <section className="flex flex-col gap-1 pt-1 mb-4">
         <h1 className="text-2xl sm:text-3xl font-black text-on-surface tracking-tight leading-tight flex items-center gap-2">
           <BarChart2 className="text-primary" size={28} /> Relatórios
         </h1>
         <p className="text-xs text-on-surface-variant font-normal">
-          Análise de seus gastos em listas concluídas.
+          Análise detalhada de seus gastos.
         </p>
       </section>
+
+      {/* Toggle View Mode */}
+      <div className="flex bg-surface-container-low rounded-xl p-1 gap-1 border border-outline-variant/30 mb-6">
+        <button
+          onClick={() => setViewMode('MARKET')}
+          className={clsx(
+            "flex-1 flex items-center justify-center gap-2 py-2 text-sm font-bold rounded-lg transition-all",
+            viewMode === 'MARKET' ? 'bg-primary text-white shadow-sm' : 'text-on-surface-variant hover:text-on-surface'
+          )}
+        >
+          <ShoppingCart size={16} /> Mercado
+        </button>
+        <button
+          onClick={() => setViewMode('WALLET')}
+          className={clsx(
+            "flex-1 flex items-center justify-center gap-2 py-2 text-sm font-bold rounded-lg transition-all",
+            viewMode === 'WALLET' ? 'bg-primary text-white shadow-sm' : 'text-on-surface-variant hover:text-on-surface'
+          )}
+        >
+          <Wallet size={16} /> Carteira
+        </button>
+      </div>
 
       {/* Hero Card: Total Gasto */}
       <div className="bg-gradient-to-br from-primary to-primary-container rounded-3xl p-6 text-on-primary shadow-lg mb-8 relative overflow-hidden">
@@ -56,7 +100,10 @@ export const ReportsView: React.FC = () => {
           <p className="text-sm font-medium text-primary-fixed mb-1 uppercase tracking-wider">Total Gasto</p>
           <h2 className="text-4xl font-black tracking-tight mb-2">{formatCurrency(totalGasto)}</h2>
           <p className="text-xs text-white/80">
-            Considerando apenas as {completedLists.length} {completedLists.length === 1 ? 'lista concluída' : 'listas concluídas'}.
+            {viewMode === 'MARKET' 
+              ? `Considerando apenas as ${totalItemsCount} ${totalItemsCount === 1 ? 'lista concluída' : 'listas concluídas'}.` 
+              : `Considerando apenas ${totalItemsCount} ${totalItemsCount === 1 ? 'despesa paga' : 'despesas pagas'}.`
+            }
           </p>
         </div>
       </div>
@@ -90,7 +137,6 @@ export const ReportsView: React.FC = () => {
                     formatter={(value: any) => formatCurrency(value)}
                     contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                   />
-                  <Legend verticalAlign="bottom" height={36} iconType="circle" />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -130,7 +176,10 @@ export const ReportsView: React.FC = () => {
           </div>
           <h3 className="text-lg font-bold text-on-surface mb-2">Sem Dados</h3>
           <p className="text-sm text-on-surface-variant">
-            Conclua suas listas e adicione os preços dos produtos para gerar relatórios detalhados.
+            {viewMode === 'MARKET'
+              ? 'Conclua suas listas e adicione os preços dos produtos para gerar relatórios detalhados.'
+              : 'Registre e dê baixa em suas despesas na aba de Carteira para gerar relatórios.'
+            }
           </p>
         </div>
       )}

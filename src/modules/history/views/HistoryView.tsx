@@ -1,7 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useListStore, type ShoppingList } from '../../shopping/store/useListStore';
+import { useFinanceStore } from '../../finance/store/useFinanceStore';
+import { TransactionCard } from '../../finance/components/TransactionCard';
 import { formatCurrency } from '../../../core/utils/currency';
-import { Receipt, ShoppingBag, Wallet2, Sparkles, ChevronDown, Trash2, Share2 } from 'lucide-react';
+import { Receipt, ShoppingBag, Wallet2, Sparkles, ChevronDown, Trash2, Share2, ShoppingCart, Wallet } from 'lucide-react';
 import { clsx } from 'clsx';
 
 // ─── Utilidades ───────────────────────────────────────────────────────────────
@@ -158,7 +160,13 @@ const PurchaseCard: React.FC<{ list: ShoppingList; onDelete: (id: string) => voi
 // ─── View Principal ────────────────────────────────────────────────────────────
 
 export const HistoryView: React.FC = () => {
+  const [viewMode, setViewMode] = useState<'MARKET' | 'WALLET'>('MARKET');
   const { lists, deleteList } = useListStore();
+  const { transactions, payTransaction, fetchTransactions } = useFinanceStore();
+
+  useEffect(() => {
+    fetchTransactions();
+  }, [fetchTransactions]);
 
   // Apenas listas concluídas
   const completed = useMemo(
@@ -169,17 +177,19 @@ export const HistoryView: React.FC = () => {
   // Anos disponíveis
   const availableYears = useMemo(() => {
     const current = new Date().getFullYear();
-    const set = new Set(completed.map(l => new Date(l.created_at).getFullYear()));
+    const set = new Set<number>();
+    completed.forEach(l => set.add(new Date(l.created_at).getFullYear()));
+    transactions.forEach(t => set.add(Number(t.due_date.split('-')[0])));
     [-2, -1, 0, 1].forEach(d => set.add(current + d));
     return [...set].sort((a, b) => b - a);
-  }, [completed]);
+  }, [completed, transactions]);
 
   const [filterYear, setFilterYear] = useState<string>(String(new Date().getFullYear()));
   const [filterMonth, setFilterMonth] = useState<string>('0'); // 0 = Todos
   const [filterDay, setFilterDay] = useState<string>('0');     // 0 = Todos
 
-  // Aplicar filtros
-  const filtered = useMemo(() => {
+  // Filtro Mercado
+  const filteredMarket = useMemo(() => {
     return completed.filter(l => {
       const d = new Date(l.created_at);
       if (filterYear !== '0' && d.getFullYear() !== Number(filterYear)) return false;
@@ -189,40 +199,88 @@ export const HistoryView: React.FC = () => {
     });
   }, [completed, filterYear, filterMonth, filterDay]);
 
-  // Cálculo dos cards de balanço
-  const totalSpent = useMemo(() => filtered.reduce((acc, l) => acc + calcListSpent(l), 0), [filtered]);
-  const totalBudget = useMemo(() => filtered.reduce((acc, l) => acc + (l.budget || 0), 0), [filtered]);
-  const totalSavings = totalBudget > 0 ? totalBudget - totalSpent : null;
-  const avgPerPurchase = filtered.length > 0 ? totalSpent / filtered.length : 0;
+  // Filtro Carteira
+  const filteredWallet = useMemo(() => {
+    return transactions.filter(t => {
+      const [y, m, d] = t.due_date.split('-');
+      if (filterYear !== '0' && y !== filterYear) return false;
+      if (filterMonth !== '0' && Number(m) !== Number(filterMonth)) return false;
+      if (filterDay !== '0' && Number(d) !== Number(filterDay)) return false;
+      return true;
+    }).sort((a, b) => new Date(b.due_date).getTime() - new Date(a.due_date).getTime());
+  }, [transactions, filterYear, filterMonth, filterDay]);
+
+  // Cálculo dos cards de balanço (MERCADO)
+  const marketSpent = useMemo(() => filteredMarket.reduce((acc, l) => acc + calcListSpent(l), 0), [filteredMarket]);
+  const marketBudget = useMemo(() => filteredMarket.reduce((acc, l) => acc + (l.budget || 0), 0), [filteredMarket]);
+  const marketSavings = marketBudget > 0 ? marketBudget - marketSpent : null;
+  const marketAvg = filteredMarket.length > 0 ? marketSpent / filteredMarket.length : 0;
+
+  // Cálculo dos cards de balanço (CARTEIRA)
+  const walletIncome = useMemo(() => filteredWallet.filter(t => t.type === 'INCOME').reduce((a, b) => a + b.amount, 0), [filteredWallet]);
+  const walletExpense = useMemo(() => filteredWallet.filter(t => t.type === 'EXPENSE').reduce((a, b) => a + b.amount, 0), [filteredWallet]);
+  const walletBalance = walletIncome - walletExpense;
 
   // Dados para o gráfico mensal
   const year = filterYear !== '0' ? Number(filterYear) : new Date().getFullYear();
   const byMonth = useMemo(() => {
     return Array.from({ length: 12 }, (_, i) => {
       const monthNum = i + 1;
-      const spent = completed
-        .filter(l => {
-          const d = new Date(l.created_at);
-          return d.getFullYear() === year && d.getMonth() + 1 === monthNum;
-        })
-        .reduce((acc, l) => acc + calcListSpent(l), 0);
+      let spent = 0;
+      if (viewMode === 'MARKET') {
+        spent = completed
+          .filter(l => {
+            const d = new Date(l.created_at);
+            return d.getFullYear() === year && d.getMonth() + 1 === monthNum;
+          })
+          .reduce((acc, l) => acc + calcListSpent(l), 0);
+      } else {
+        spent = transactions
+          .filter(t => {
+            const [y, m] = t.due_date.split('-');
+            return Number(y) === year && Number(m) === monthNum && t.type === 'EXPENSE';
+          })
+          .reduce((acc, t) => acc + t.amount, 0);
+      }
       return { month: monthNum, label: MONTHS[i], spent };
     });
-  }, [completed, year]);
+  }, [completed, transactions, year, viewMode]);
 
   const maxSpent = Math.max(...byMonth.map(m => m.spent), 100);
 
   return (
     <div className="flex flex-col w-full min-h-screen bg-surface pb-32 px-margin pt-2">
       {/* Cabeçalho */}
-      <section className="flex flex-col gap-1 pt-1 mb-6">
+      <section className="flex flex-col gap-1 pt-1 mb-4">
         <h1 className="text-2xl sm:text-3xl font-black text-on-surface tracking-tight leading-tight flex items-center gap-2">
           <Receipt className="text-primary" size={28} /> Balanço & Histórico
         </h1>
         <p className="text-xs text-on-surface-variant font-normal">
-          Todas as suas compras concluídas e seus balanços.
+          Todas as suas movimentações e compras.
         </p>
       </section>
+
+      {/* Toggle View Mode */}
+      <div className="flex bg-surface-container-low rounded-xl p-1 gap-1 border border-outline-variant/30 mb-6">
+        <button
+          onClick={() => setViewMode('MARKET')}
+          className={clsx(
+            "flex-1 flex items-center justify-center gap-2 py-2 text-sm font-bold rounded-lg transition-all",
+            viewMode === 'MARKET' ? 'bg-primary text-white shadow-sm' : 'text-on-surface-variant hover:text-on-surface'
+          )}
+        >
+          <ShoppingCart size={16} /> Mercado
+        </button>
+        <button
+          onClick={() => setViewMode('WALLET')}
+          className={clsx(
+            "flex-1 flex items-center justify-center gap-2 py-2 text-sm font-bold rounded-lg transition-all",
+            viewMode === 'WALLET' ? 'bg-primary text-white shadow-sm' : 'text-on-surface-variant hover:text-on-surface'
+          )}
+        >
+          <Wallet size={16} /> Carteira
+        </button>
+      </div>
 
       {/* ─── Filtros ─────────────────────────────────────────── */}
       <div className="grid grid-cols-3 gap-2 mb-6">
@@ -258,42 +316,73 @@ export const HistoryView: React.FC = () => {
 
       {/* ─── Cards de Balanço ────────────────────────────────── */}
       <div className="grid grid-cols-2 gap-3 mb-6">
-        {/* Total Gasto */}
-        <div className="relative flex flex-col p-4 rounded-3xl overflow-hidden" style={{ background: 'color-mix(in srgb, var(--primary) 12%, transparent)' }}>
-          <div className="absolute right-2 top-2 text-primary/10 pointer-events-none"><ShoppingBag size={52} /></div>
-          <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">Total Gasto Real</span>
-          <span className="text-xl font-black text-primary">{formatCurrency(totalSpent)}</span>
-          <span className="text-[10px] text-on-surface-variant mt-1">{filtered.length} {filtered.length === 1 ? 'compra' : 'compras'} registradas</span>
-        </div>
+        {viewMode === 'MARKET' ? (
+          <>
+            {/* Total Gasto (Mercado) */}
+            <div className="relative flex flex-col p-4 rounded-3xl overflow-hidden" style={{ background: 'color-mix(in srgb, var(--primary) 12%, transparent)' }}>
+              <div className="absolute right-2 top-2 text-primary/10 pointer-events-none"><ShoppingBag size={52} /></div>
+              <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">Total Gasto Real</span>
+              <span className="text-xl font-black text-primary">{formatCurrency(marketSpent)}</span>
+              <span className="text-[10px] text-on-surface-variant mt-1">{filteredMarket.length} {filteredMarket.length === 1 ? 'compra' : 'compras'} registradas</span>
+            </div>
 
-        {/* Orçamento Total */}
-        <div className="relative flex flex-col p-4 rounded-3xl overflow-hidden" style={{ background: 'var(--surface-container-low)' }}>
-          <div className="absolute right-2 top-2 text-on-surface-variant/10 pointer-events-none"><Wallet2 size={52} /></div>
-          <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">Orçamento Total</span>
-          <span className="text-xl font-black text-on-surface">{totalBudget > 0 ? formatCurrency(totalBudget) : '—'}</span>
-          <span className="text-[10px] text-on-surface-variant mt-1">Média: {formatCurrency(avgPerPurchase)} / compra</span>
-        </div>
+            {/* Orçamento Total (Mercado) */}
+            <div className="relative flex flex-col p-4 rounded-3xl overflow-hidden" style={{ background: 'var(--surface-container-low)' }}>
+              <div className="absolute right-2 top-2 text-on-surface-variant/10 pointer-events-none"><Wallet2 size={52} /></div>
+              <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">Orçamento Total</span>
+              <span className="text-xl font-black text-on-surface">{marketBudget > 0 ? formatCurrency(marketBudget) : '—'}</span>
+              <span className="text-[10px] text-on-surface-variant mt-1">Média: {formatCurrency(marketAvg)} / compra</span>
+            </div>
 
-        {/* Economia — col-span-2 */}
-        <div className={clsx(
-          'col-span-2 relative flex flex-col p-4 rounded-3xl overflow-hidden',
-          totalSavings === null ? 'bg-surface-container-low' :
-          totalSavings >= 0 ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'bg-rose-50 dark:bg-rose-900/20'
-        )}>
-          <div className="absolute right-3 top-3 pointer-events-none opacity-10">
-            <Sparkles size={52} className={totalSavings !== null && totalSavings < 0 ? 'text-rose-500' : 'text-emerald-500'} />
-          </div>
-          <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">
-            {totalSavings === null ? 'Economia / Saldo' : totalSavings >= 0 ? '✅ Economia no Período' : '⚠️ Orçamento Estourado'}
-          </span>
-          <span className={clsx(
-            'text-2xl font-black',
-            totalSavings === null ? 'text-on-surface-variant' :
-            totalSavings >= 0 ? 'text-emerald-600' : 'text-rose-600'
-          )}>
-            {totalSavings === null ? '—' : `${totalSavings >= 0 ? '+' : ''}${formatCurrency(totalSavings)}`}
-          </span>
-        </div>
+            {/* Economia (Mercado) */}
+            <div className={clsx(
+              'col-span-2 relative flex flex-col p-4 rounded-3xl overflow-hidden',
+              marketSavings === null ? 'bg-surface-container-low' :
+              marketSavings >= 0 ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'bg-rose-50 dark:bg-rose-900/20'
+            )}>
+              <div className="absolute right-3 top-3 pointer-events-none opacity-10">
+                <Sparkles size={52} className={marketSavings !== null && marketSavings < 0 ? 'text-rose-500' : 'text-emerald-500'} />
+              </div>
+              <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">
+                {marketSavings === null ? 'Economia / Saldo' : marketSavings >= 0 ? '✅ Economia no Período' : '⚠️ Orçamento Estourado'}
+              </span>
+              <span className={clsx(
+                'text-2xl font-black',
+                marketSavings === null ? 'text-on-surface-variant' :
+                marketSavings >= 0 ? 'text-emerald-600' : 'text-rose-600'
+              )}>
+                {marketSavings === null ? '—' : `${marketSavings >= 0 ? '+' : ''}${formatCurrency(marketSavings)}`}
+              </span>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Total Entradas (Carteira) */}
+            <div className="relative flex flex-col p-4 rounded-3xl overflow-hidden bg-emerald-50 dark:bg-emerald-900/20">
+              <span className="text-[10px] font-bold text-emerald-800 dark:text-emerald-200 uppercase tracking-wider mb-1">Entradas</span>
+              <span className="text-xl font-black text-emerald-600 dark:text-emerald-400">{formatCurrency(walletIncome)}</span>
+            </div>
+
+            {/* Total Saídas (Carteira) */}
+            <div className="relative flex flex-col p-4 rounded-3xl overflow-hidden bg-rose-50 dark:bg-rose-900/20">
+              <span className="text-[10px] font-bold text-rose-800 dark:text-rose-200 uppercase tracking-wider mb-1">Despesas</span>
+              <span className="text-xl font-black text-rose-600 dark:text-rose-400">{formatCurrency(walletExpense)}</span>
+            </div>
+
+            {/* Balanço (Carteira) */}
+            <div className={clsx(
+              'col-span-2 relative flex flex-col p-4 rounded-3xl overflow-hidden',
+              walletBalance >= 0 ? 'bg-primary text-on-primary' : 'bg-error text-on-error'
+            )}>
+              <span className="text-[10px] font-bold uppercase tracking-wider mb-1 opacity-80">
+                Balanço do Período
+              </span>
+              <span className="text-2xl font-black">
+                {walletBalance >= 0 ? '+' : ''}{formatCurrency(walletBalance)}
+              </span>
+            </div>
+          </>
+        )}
       </div>
 
       {/* ─── Gráfico de Barras CSS ───────────────────────────── */}
@@ -346,19 +435,41 @@ export const HistoryView: React.FC = () => {
       {/* ─── Timeline de compras ──────────────────────────────── */}
       <div className="flex flex-col">
         <h2 className="text-base font-black text-on-surface mb-4">
-          {filtered.length === 0 ? 'Nenhum registro' : `${filtered.length} ${filtered.length === 1 ? 'Compra' : 'Compras'} no Período`}
+          {viewMode === 'MARKET' 
+            ? (filteredMarket.length === 0 ? 'Nenhum registro' : `${filteredMarket.length} ${filteredMarket.length === 1 ? 'Compra' : 'Compras'} no Período`)
+            : (filteredWallet.length === 0 ? 'Nenhuma transação' : `${filteredWallet.length} ${filteredWallet.length === 1 ? 'Transação' : 'Transações'} no Período`)
+          }
         </h2>
 
-        {filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 rounded-3xl border border-dashed border-outline-variant/40 text-center">
-            <Receipt size={40} className="text-on-surface-variant/30 mb-3" />
-            <p className="text-sm font-bold text-on-surface-variant">Nenhuma compra encontrada</p>
-            <p className="text-xs text-on-surface-variant/60 mt-1">Tente ajustar os filtros de período.</p>
-          </div>
+        {viewMode === 'MARKET' ? (
+          filteredMarket.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 rounded-3xl border border-dashed border-outline-variant/40 text-center">
+              <Receipt size={40} className="text-on-surface-variant/30 mb-3" />
+              <p className="text-sm font-bold text-on-surface-variant">Nenhuma compra encontrada</p>
+              <p className="text-xs text-on-surface-variant/60 mt-1">Tente ajustar os filtros de período.</p>
+            </div>
+          ) : (
+            filteredMarket.map(list => (
+              <PurchaseCard key={list.id} list={list} onDelete={deleteList} />
+            ))
+          )
         ) : (
-          filtered.map(list => (
-            <PurchaseCard key={list.id} list={list} onDelete={deleteList} />
-          ))
+          filteredWallet.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 rounded-3xl border border-dashed border-outline-variant/40 text-center">
+              <Wallet2 size={40} className="text-on-surface-variant/30 mb-3" />
+              <p className="text-sm font-bold text-on-surface-variant">Nenhuma transação encontrada</p>
+              <p className="text-xs text-on-surface-variant/60 mt-1">Tente ajustar os filtros de período.</p>
+            </div>
+          ) : (
+            filteredWallet.map(t => (
+              <TransactionCard
+                key={t.id}
+                transaction={t}
+                onPay={payTransaction}
+                onEdit={() => {}} // Edição feita apenas na tela de carteira
+              />
+            ))
+          )
         )}
       </div>
     </div>

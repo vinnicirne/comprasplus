@@ -1,7 +1,6 @@
 import React from 'react';
 import { useNavigationStore, type AppView } from '../../../core/store/useNavigationStore';
-import { useAuthStore } from '../../auth/store/useAuthStore';
-import { ListChecks, Wallet, BarChart2, Receipt, User, LogOut, Trophy } from 'lucide-react';
+import { ListChecks, Wallet, BarChart2, Receipt, User, Trophy } from 'lucide-react';
 import { clsx } from 'clsx';
 
 interface AppLayoutProps {
@@ -10,7 +9,6 @@ interface AppLayoutProps {
 
 export function AppLayout({ children }: AppLayoutProps) {
   const { currentView, navigate } = useNavigationStore();
-  const { user, signOut } = useAuthStore();
 
   const navItems: { id: AppView; label: string; icon: React.ReactNode }[] = [
     { id: 'DASHBOARD', label: 'Listas', icon: <ListChecks size={24} /> },
@@ -25,31 +23,11 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <div className="flex flex-col h-screen w-full bg-surface text-on-surface overflow-hidden">
-      {/* Header com gradiente verde oficial */}
-      <header className="flex items-center justify-between px-5 py-3 z-10 shrink-0"
-        style={{ background: 'linear-gradient(135deg, #006948 0%, #00855d 100%)', boxShadow: 'var(--shadow-primary)' }}
-      >
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center text-white font-bold text-base border border-white/30">
-            {user?.email?.charAt(0).toUpperCase() || 'U'}
-          </div>
-          <div className="flex flex-col">
-            <span className="text-[10px] text-white/70 font-medium">Olá,</span>
-            <span className="text-sm font-bold text-white truncate max-w-[150px]">
-              {user?.user_metadata?.name || user?.email?.split('@')[0] || 'Visitante'}
-            </span>
-          </div>
-        </div>
-        <button
-          onClick={() => signOut()}
-          className="p-2 text-white/70 hover:text-white hover:bg-white/20 rounded-full transition-colors"
-          title="Sair"
-        >
-          <LogOut size={20} />
-        </button>
-      </header>
-
       <main className="flex-1 overflow-y-auto overflow-x-hidden relative">
+        {/* Header com gradiente verde oficial vazio (Margem Segura / Branding) */}
+        <header className="w-full h-10 shrink-0"
+          style={{ background: 'linear-gradient(135deg, #006948 0%, #00855d 100%)', boxShadow: 'var(--shadow-primary)' }}
+        />
         {children}
       </main>
 

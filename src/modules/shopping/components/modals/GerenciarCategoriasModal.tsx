@@ -19,7 +19,8 @@ export const GerenciarCategoriasModal: React.FC<GerenciarCategoriasModalProps> =
   const handleAdd = () => {
     const trimmed = newName.trim();
     if (!trimmed) return;
-    if (categories.includes(trimmed)) {
+    
+    if (categories.some(c => c.toLowerCase() === trimmed.toLowerCase())) {
       setError('Categoria já existe.');
       return;
     }
@@ -37,7 +38,7 @@ export const GerenciarCategoriasModal: React.FC<GerenciarCategoriasModalProps> =
   const handleEditConfirm = (oldName: string) => {
     const trimmed = editingValue.trim();
     if (!trimmed) { setEditingIndex(null); return; }
-    if (trimmed !== oldName && categories.includes(trimmed)) {
+    if (trimmed.toLowerCase() !== oldName.toLowerCase() && categories.some(c => c.toLowerCase() === trimmed.toLowerCase())) {
       setError('Já existe uma categoria com esse nome.');
       return;
     }

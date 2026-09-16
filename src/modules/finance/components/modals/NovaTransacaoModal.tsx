@@ -16,7 +16,7 @@ interface NovaTransacaoModalProps {
 }
 
 export const NovaTransacaoModal: React.FC<NovaTransacaoModalProps> = ({ open, onOpenChange, transactionToEdit }) => {
-  const { addTransaction, updateTransaction, deleteTransaction } = useFinanceStore();
+  const { addTransaction, updateTransaction, deleteTransaction, transactions } = useFinanceStore();
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   const [type, setType] = useState<'INCOME' | 'EXPENSE'>('EXPENSE');
@@ -31,6 +31,9 @@ export const NovaTransacaoModal: React.FC<NovaTransacaoModalProps> = ({ open, on
   const [installments, setInstallments] = useState('2');
   
   const [error, setError] = useState('');
+
+  // Sugestões de categoria baseadas no histórico do usuário
+  const uniqueCategories = Array.from(new Set(transactions.map(t => t.category).filter(c => c && c.trim() !== ''))).sort();
 
   React.useEffect(() => {
     if (open) {
@@ -177,7 +180,13 @@ export const NovaTransacaoModal: React.FC<NovaTransacaoModalProps> = ({ open, on
           icon={Tag}
           value={category}
           onChange={e => setCategory(e.target.value)}
+          list="category-suggestions"
         />
+        <datalist id="category-suggestions">
+          {uniqueCategories.map(cat => (
+            <option key={cat} value={cat} />
+          ))}
+        </datalist>
 
         <Input 
           label="Data de Vencimento / Recebimento" 
