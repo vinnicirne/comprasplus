@@ -10,6 +10,7 @@ import { useListStore } from '../store/useListStore';
 import type { ShoppingList } from '../store/useListStore';
 import { useCategoryStore } from '../store/useCategoryStore';
 import { useNavigationStore } from '../../../core/store/useNavigationStore';
+import { useAuthStore } from '../../auth/store/useAuthStore';
 import { Search, RefreshCw, Link as LinkIcon, Plus } from 'lucide-react';
 import { Button } from '../../../core/components/ui/Button';
 
@@ -69,7 +70,7 @@ export const DashboardView: React.FC = () => {
       <div className="flex flex-col w-full px-margin gap-4 pb-6 pt-2">
         <section className="flex flex-col gap-1 pt-1">
           <span className="text-xs sm:text-sm font-bold text-primary flex items-center gap-1">
-            Olá, <span>Visitante</span> <span className="inline-block text-base">👋</span>
+            Olá, <span>{useAuthStore.getState().user?.user_metadata?.name || useAuthStore.getState().user?.email?.split('@')[0] || 'Visitante'}</span> <span className="inline-block text-base">👋</span>
           </span>
           <h1 className="text-2xl sm:text-3xl font-black text-on-surface tracking-tight leading-tight">
             Minhas Listas
