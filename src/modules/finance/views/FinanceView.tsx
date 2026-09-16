@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useFinanceStore, type FinanceTransaction } from '../store/useFinanceStore';
-import { Wallet, TrendingUp, Landmark, Plus } from 'lucide-react';
-import { Button } from '../../../core/components/ui/Button';
+import { Wallet, Landmark, Plus } from 'lucide-react';
 import { TransactionCard } from '../components/TransactionCard';
 import { NovaTransacaoModal } from '../components/modals/NovaTransacaoModal';
 import { formatCurrency } from '../../../core/utils/currency';

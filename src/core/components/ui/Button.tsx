@@ -1,10 +1,10 @@
-import React, { forwardRef } from 'react';
+import { forwardRef } from 'react';
 import type { ButtonHTMLAttributes } from 'react';
 import { cn } from "../../utils/cn";
 import type { LucideIcon } from 'lucide-react';
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'outline';
   size?: 'sm' | 'md' | 'lg' | 'icon';
   icon?: LucideIcon;
   isLoading?: boolean;
@@ -17,6 +17,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       secondary: 'bg-primary-fixed/30 text-primary border border-transparent hover:border-primary active:scale-[0.98]',
       ghost: 'bg-transparent text-on-surface-variant hover:bg-surface-container hover:text-on-surface active:scale-95',
       danger: 'bg-error text-on-error hover:bg-error/90 active:scale-[0.98] shadow-md',
+      outline: 'bg-transparent border border-outline-variant text-on-surface hover:bg-surface-container active:scale-[0.98]',
     };
 
     const sizes = {

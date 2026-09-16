@@ -10,6 +10,8 @@ import { ReportsView } from './modules/reports/views/ReportsView';
 import { HistoryView } from './modules/history/views/HistoryView';
 import { ProfileView } from './modules/profile/views/ProfileView';
 import { RankingView } from './modules/ranking/views/RankingView';
+import { SplashScreen } from './core/components/SplashScreen';
+import { useState } from 'react';
 
 function AppContent() {
   const currentView = useNavigationStore(state => state.currentView);
@@ -33,8 +35,19 @@ function AppContent() {
 }
 
 function App() {
+  // Splash screen só aparece uma vez por sessão
+  const [showSplash, setShowSplash] = useState(() => {
+    return !sessionStorage.getItem('comprasplus_splashed');
+  });
+
+  const handleSplashComplete = () => {
+    sessionStorage.setItem('comprasplus_splashed', '1');
+    setShowSplash(false);
+  };
+
   return (
     <AuthProvider>
+      {showSplash && <SplashScreen onComplete={handleSplashComplete} />}
       <div className="w-full max-w-[600px] mx-auto min-h-screen flex flex-col relative shadow-2xl bg-background overflow-hidden">
         <AppLayout>
           <AppContent />

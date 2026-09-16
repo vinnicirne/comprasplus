@@ -91,7 +91,8 @@ class SyncEngine {
     for (const op of queue) {
       // SEC-004: Re-valida operações lidas do localStorage (podem ter sido manipuladas)
       if (!this.isValidOperation(op)) {
-        const index = remainingQueue.findIndex(q => q.id === op.id);
+        const opId = (op as { id?: string }).id;
+        const index = remainingQueue.findIndex(q => q.id === opId);
         if (index > -1) remainingQueue.splice(index, 1);
         continue;
       }

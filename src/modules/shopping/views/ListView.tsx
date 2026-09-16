@@ -117,7 +117,6 @@ export const ListView: React.FC = () => {
     return price * qty;
   };
   const totalGasto = items.filter(i => i.checked).reduce((acc, i) => acc + getCalcPrice(i), 0);
-  const totalPrevisto = items.reduce((acc, i) => acc + getCalcPrice(i), 0);
   const budget = list.budget || 0;
 
   return (

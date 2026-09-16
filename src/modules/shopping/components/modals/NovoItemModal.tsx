@@ -34,7 +34,7 @@ export const NovoItemModal: React.FC<NovoItemModalProps> = ({ open, onOpenChange
   const [isManageCatsOpen, setIsManageCatsOpen] = useState(false);
   const { addItem, updateItem } = useListStore();
   const { categories } = useCategoryStore();
-  const { searchResults, isSearching, searchProducts, registerProduct, clearSearch } = useProductStore();
+  const { searchResults, searchProducts, registerProduct, clearSearch } = useProductStore();
 
   // Reset form when opened
   useEffect(() => {

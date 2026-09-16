@@ -37,7 +37,7 @@ interface RankedItem {
 
 export const RankingView: React.FC = () => {
   const { lists, updateList } = useListStore();
-  const { activeListId, navigate } = useNavigationStore();
+  const { activeListId } = useNavigationStore();
 
   const [toastMessage, setToastMessage] = useState('');
 

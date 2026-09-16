@@ -17,7 +17,7 @@ interface ProductState {
   clearSearch: () => void;
 }
 
-export const useProductStore = create<ProductState>((set, get) => ({
+export const useProductStore = create<ProductState>((set) => ({
   searchResults: [],
   isSearching: false,
 
