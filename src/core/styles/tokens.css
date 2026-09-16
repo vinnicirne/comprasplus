@@ -1,0 +1,105 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* === PRIMÁRIAS (Verde Brand) === */
+    --primary: #006948;
+    --primary-hover: #005137;
+    --primary-light: #85f8c4;
+    --primary-fixed: #85f8c4;
+    --primary-fixed-dim: #68dba9;
+    --primary-container: #00855d;
+    --on-primary: #ffffff;
+    --on-primary-container: #f5fff7;
+    --on-primary-fixed: #002114;
+    --on-primary-fixed-variant: #005137;
+    --inverse-primary: #68dba9;
+    --surface-tint: #006c4a;
+
+    /* === SECUNDÁRIAS (Verde Limão) === */
+    --secondary: #416900;
+    --secondary-container: #acf847;
+    --secondary-fixed: #acf847;
+    --secondary-fixed-dim: #91db2a;
+    --on-secondary: #ffffff;
+    --on-secondary-container: #457000;
+    --on-secondary-fixed: #0f2000;
+    --on-secondary-fixed-variant: #304f00;
+
+    /* === TERCIÁRIA (Azul) === */
+    --tertiary: #006194;
+    --tertiary-container: #007bb9;
+    --tertiary-fixed: #cce5ff;
+    --tertiary-fixed-dim: #93ccff;
+    --on-tertiary: #ffffff;
+    --on-tertiary-container: #fdfcff;
+    --on-tertiary-fixed: #001d31;
+    --on-tertiary-fixed-variant: #004b73;
+
+    /* === SUPERFÍCIES === */
+    --surface: #faf8ff;
+    --surface-dim: #d2d9f4;
+    --surface-bright: #faf8ff;
+    --surface-container-lowest: #ffffff;
+    --surface-container-low: #f2f3ff;
+    --surface-container: #eaedff;
+    --surface-container-high: #e2e7ff;
+    --surface-container-highest: #dae2fd;
+    --surface-variant: #dae2fd;
+    --inverse-surface: #283044;
+    --inverse-on-surface: #eef0ff;
+    --bg-app: #faf8ff;
+    --bg-card: #ffffff;
+    --bg-input: #f2f3ff;
+
+    /* === TEXTO (On-Surface) === */
+    --on-surface: #131b2e;
+    --on-surface-variant: #3d4a42;
+    --on-background: #131b2e;
+    --text-main: #131b2e;
+    --text-muted: #3d4a42;
+    --outline: #6d7a72;
+    --outline-variant: rgba(188, 202, 192, 0.4);
+    --text-light: #6d7a72;
+    --border-color: rgba(188, 202, 192, 0.4);
+    --border-focus: #006948;
+
+    /* === ERRO === */
+    --error: #ba1a1a;
+    --on-error: #ffffff;
+    --error-container: #ffdad6;
+    --on-error-container: #93000a;
+
+    /* === SEMÂNTICAS (Feedback) === */
+    --success: #006948;
+    --success-bg: #e8f5e9;
+    --success-text: #005137;
+    --warning: #f59e0b;
+    --warning-bg: #fffbeb;
+    --warning-text: #78350f;
+
+    /* === BACKGROUND === */
+    --background: #faf8ff;
+
+    /* === SOMBRAS === */
+    --shadow-sm: 0 1px 3px rgba(15,23,42,0.05), 0 1px 8px rgba(15,23,42,0.04);
+    --shadow-md: 0 4px 12px rgba(0,105,72,0.08);
+    --shadow-lg: 0 12px 28px rgba(0,105,72,0.12);
+    --shadow-primary: 0 8px 20px rgba(0,105,72,0.3);
+
+    /* === BORDER RADIUS === */
+    --radius-sm: 10px;
+    --radius-md: 14px;
+    --radius-lg: 20px;
+    --radius-xl: 24px;
+    --radius-full: 9999px;
+
+    /* === TIPOGRAFIA === */
+    --font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+    /* === TRANSIÇÃO === */
+    --transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
