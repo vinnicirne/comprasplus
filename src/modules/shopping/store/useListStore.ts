@@ -32,6 +32,10 @@ export interface ShoppingItem {
   // UI helpers
   lastUpdatedAt?: string;
   isBlinking?: boolean;
+  // Lista Contínua e Rateada
+  finalized_at?: string;
+  assigned_to?: string;
+  assigned_value?: number;
 }
 
 export interface ShoppingList {
@@ -39,6 +43,8 @@ export interface ShoppingList {
   name: string;
   store?: string;
   category: ListCategory;
+  list_type?: 'normal' | 'continua' | 'rateada';
+  split_strategy?: 'products' | 'value';
   budget?: number;
   items: ShoppingItem[];
   status: ListStatus;
@@ -72,6 +78,10 @@ interface ListStoreState {
   // Realtime Operations
   subscribeToRealtime: (listId: string) => void;
   unsubscribeFromRealtime: () => void;
+
+  // Lista Contínua e Rateada
+  finalizePartialList: (listId: string, itemIds: string[]) => Promise<void>;
+  finalizeSplitList: (listId: string) => Promise<void>;
 }
 
 export const useListStore = create<ListStoreState>((set, get) => ({
@@ -279,5 +289,101 @@ export const useListStore = create<ListStoreState>((set, get) => ({
       supabase.removeChannel((window as any)._currentListChannel);
       (window as any)._currentListChannel = null;
     }
+  },
+
+  finalizePartialList: async (listId, itemIds) => {
+    const state = get();
+    const list = state.lists.find(l => l.id === listId);
+    if (!list) return;
+
+    const user = useAuthStore.getState().user;
+    if (!user) return;
+
+    // Separate items to finalize
+    const now = new Date().toISOString();
+    const updatedItems = list.items.map(item => {
+      if (itemIds.includes(item.id)) {
+        return { ...item, finalized_at: now };
+      }
+      return item;
+    });
+
+    state.updateList(listId, { items: updatedItems });
+
+    // Calculate total for wallet
+    const totalAmount = list.items
+      .filter(i => itemIds.includes(i.id))
+      .reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || 1)), 0);
+
+    if (totalAmount > 0) {
+      const transactionId = crypto.randomUUID();
+      syncEngine.addOperation({
+        table: 'finance_transactions',
+        type: 'INSERT',
+        record_id: transactionId,
+        payload: {
+          id: transactionId,
+          owner_id: user.id,
+          description: `Compras em ${list.name} (Parcial)`,
+          amount: totalAmount,
+          type: 'EXPENSE',
+          status: 'PAID',
+          category: list.name, // Nome da lista como categoria
+          due_date: new Date().toISOString().split('T')[0]
+        }
+      });
+    }
+  },
+
+  finalizeSplitList: async (listId) => {
+    const state = get();
+    const list = state.lists.find(l => l.id === listId);
+    if (!list) return;
+
+    const user = useAuthStore.getState().user;
+    if (!user) return;
+
+    // For a split list, we need to gather everyone's share
+    // This will group by user ID (either assigned_to or fallback to owner)
+    const userShares: Record<string, number> = {};
+
+    list.items.forEach(item => {
+      const uId = item.assigned_to || user.id; // assigned_to or owner
+      const amount = list.split_strategy === 'value' 
+        ? (item.assigned_value || 0)
+        : ((item.price || 0) * (item.quantity || 1));
+      
+      if (amount > 0) {
+        userShares[uId] = (userShares[uId] || 0) + amount;
+      }
+    });
+
+    // Build the transactions JSON
+    const transactions = Object.entries(userShares).map(([uId, amount]) => ({
+      id: crypto.randomUUID(),
+      owner_id: uId,
+      description: `Rateio: ${list.name}`,
+      amount: amount,
+      type: 'EXPENSE',
+      status: 'PAID',
+      category: list.name,
+      due_date: new Date().toISOString().split('T')[0]
+    }));
+
+    if (transactions.length > 0) {
+      // Call RPC
+      const { error } = await supabase.rpc('insert_split_transactions', {
+        p_list_id: listId,
+        p_transactions: transactions
+      });
+
+      if (error) {
+        console.error('Failed to insert split transactions:', error);
+        return;
+      }
+    }
+
+    // Mark list as concluida
+    state.updateList(listId, { status: 'concluida' });
   }
 }));

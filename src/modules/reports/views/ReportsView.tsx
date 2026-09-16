@@ -11,7 +11,7 @@ const COLORS = ['#006948', '#acf847', '#416900', '#00855d', '#85f8c4'];
 
 export const ReportsView: React.FC = () => {
   const [viewMode, setViewMode] = useState<'MARKET' | 'WALLET'>('MARKET');
-  
+
   const { lists } = useListStore();
   const { transactions, fetchTransactions } = useFinanceStore();
 
@@ -22,7 +22,7 @@ export const ReportsView: React.FC = () => {
   let totalGasto = 0;
   const categoryTotals: Record<string, number> = {};
   let totalItemsCount = 0;
-  
+
   if (viewMode === 'MARKET') {
     // 1. Filtrar apenas listas concluídas
     const completedLists = lists.filter(l => l.status === 'concluida');
@@ -78,7 +78,7 @@ export const ReportsView: React.FC = () => {
             viewMode === 'MARKET' ? 'bg-primary text-white shadow-sm' : 'text-on-surface-variant hover:text-on-surface'
           )}
         >
-          <ShoppingCart size={16} /> Mercado
+          <ShoppingCart size={16} /> Listas
         </button>
         <button
           onClick={() => setViewMode('WALLET')}
@@ -100,8 +100,8 @@ export const ReportsView: React.FC = () => {
           <p className="text-sm font-medium text-primary-fixed mb-1 uppercase tracking-wider">Total Gasto</p>
           <h2 className="text-4xl font-black tracking-tight mb-2">{formatCurrency(totalGasto)}</h2>
           <p className="text-xs text-white/80">
-            {viewMode === 'MARKET' 
-              ? `Considerando apenas as ${totalItemsCount} ${totalItemsCount === 1 ? 'lista concluída' : 'listas concluídas'}.` 
+            {viewMode === 'MARKET'
+              ? `Considerando apenas as ${totalItemsCount} ${totalItemsCount === 1 ? 'lista concluída' : 'listas concluídas'}.`
               : `Considerando apenas ${totalItemsCount} ${totalItemsCount === 1 ? 'despesa paga' : 'despesas pagas'}.`
             }
           </p>
@@ -114,7 +114,7 @@ export const ReportsView: React.FC = () => {
             <PieChartIcon className="text-secondary" size={20} />
             <h3 className="text-lg font-bold">Gastos por Categoria</h3>
           </div>
-          
+
           <div className="bg-surface-container-low rounded-3xl p-4 shadow-sm border border-outline-variant/30 flex flex-col items-center">
             <div className="w-full h-[250px]">
               <ResponsiveContainer width="100%" height="100%">
@@ -133,7 +133,7 @@ export const ReportsView: React.FC = () => {
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip 
+                  <Tooltip
                     formatter={(value: any) => formatCurrency(value)}
                     contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                   />
@@ -155,11 +155,11 @@ export const ReportsView: React.FC = () => {
                     <span>{formatCurrency(item.value)}</span>
                   </div>
                   <div className="w-full bg-surface-container rounded-full h-2 overflow-hidden">
-                    <div 
+                    <div
                       className="h-full rounded-full transition-all duration-1000 ease-out"
-                      style={{ 
+                      style={{
                         width: `${percentage}%`,
-                        backgroundColor: COLORS[index % COLORS.length] 
+                        backgroundColor: COLORS[index % COLORS.length]
                       }}
                     ></div>
                   </div>

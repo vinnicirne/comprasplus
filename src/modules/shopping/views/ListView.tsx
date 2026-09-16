@@ -29,13 +29,14 @@ function getCategoryIcon(cat: string) {
 }
 
 export const ListView: React.FC = () => {
-  const { lists, toggleItem, deleteItem, updateList } = useListStore();
+  const { lists, toggleItem, deleteItem, updateList, finalizePartialList, finalizeSplitList } = useListStore();
   const { activeListId, navigate } = useNavigationStore();
   const { user } = useAuthStore();
   const [isNovoItemOpen, setIsNovoItemOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<ShoppingItem | null>(null);
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'ativos' | 'finalizados'>('ativos');
 
   useEffect(() => {
     if (activeListId) {
@@ -78,10 +79,14 @@ export const ListView: React.FC = () => {
     if (!open) setTimeout(() => setEditingItem(null), 300);
   };
 
-  // Group items by category (legado: groupedItems[cat])
+  // Separa itens ativos e finalizados (para lista contínua)
+  const activeItems = items.filter(i => !i.finalized_at);
+  const finalizedItems = items.filter(i => !!i.finalized_at);
+
+  // Group active items by category (legado: groupedItems[cat])
   const grouped: Record<string, ShoppingItem[]> = {};
   const uncategorized: ShoppingItem[] = [];
-  items.forEach(item => {
+  activeItems.forEach(item => {
     const cat = (item.category || '').trim();
     if (!cat) {
       uncategorized.push(item);
@@ -116,8 +121,19 @@ export const ListView: React.FC = () => {
     if (item.unit === 'g' || item.unit === 'ml') return (qty / 1000) * price;
     return price * qty;
   };
-  const totalGasto = items.filter(i => i.checked).reduce((acc, i) => acc + getCalcPrice(i), 0);
+  const totalGasto = activeItems.filter(i => i.checked).reduce((acc, i) => acc + getCalcPrice(i), 0);
   const budget = list.budget || 0;
+
+  // Group finalized items by date
+  const finalizedGrouped: Record<string, ShoppingItem[]> = {};
+  finalizedItems.forEach(item => {
+    if (!item.finalized_at) return;
+    const dateStr = new Date(item.finalized_at).toLocaleDateString('pt-BR');
+    if (!finalizedGrouped[dateStr]) finalizedGrouped[dateStr] = [];
+    finalizedGrouped[dateStr].push(item);
+  });
+  const finalizedGroupEntries = Object.entries(finalizedGrouped).sort((a, b) => b[0].localeCompare(a[0]));
+
 
   return (
     <main className="flex flex-col w-full min-h-screen pb-28" style={{ backgroundColor: 'var(--bg-app)' }}>
@@ -163,66 +179,90 @@ export const ListView: React.FC = () => {
         </div>
       </header>
 
+      {/* === TABS (Se for lista contínua) === */}
+      {list.list_type === 'continua' && (
+        <div className="flex w-full mt-2 px-4 gap-2">
+          <button
+            onClick={() => setActiveTab('ativos')}
+            className={`flex-1 py-2 text-sm font-bold rounded-xl transition-colors ${activeTab === 'ativos' ? 'bg-[var(--primary)] text-white' : 'bg-[var(--surface-container)] text-[var(--on-surface-variant)]'}`}
+          >
+            Ativos ({activeItems.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('finalizados')}
+            className={`flex-1 py-2 text-sm font-bold rounded-xl transition-colors ${activeTab === 'finalizados' ? 'bg-[var(--primary)] text-white' : 'bg-[var(--surface-container)] text-[var(--on-surface-variant)]'}`}
+          >
+            Finalizados ({finalizedItems.length})
+          </button>
+        </div>
+      )}
+
       {/* === SECTION: Itens da Lista === */}
       <div className="px-4 pt-5 flex-1">
-        {items.length > 0 && (
+        {activeTab === 'ativos' && activeItems.length > 0 && (
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-[15px] font-bold" style={{ color: 'var(--on-surface)' }}>Itens da Lista</h2>
             <div className="flex items-center gap-2">
               <button 
                 onClick={() => {
-                  const allChecked = items.every(i => i.checked);
+                  const allChecked = activeItems.every(i => i.checked);
                   const currentUserName = user?.user_metadata?.name || user?.email?.split('@')[0];
-                  const updatedItems = items.map(i => ({
-                    ...i,
-                    checked: !allChecked,
-                    checked_by: !allChecked ? user?.id || null : null,
-                    checked_at: !allChecked ? new Date().toISOString() : null,
-                    checked_by_name: !allChecked ? currentUserName || null : null,
-                    checkedBy: !allChecked ? currentUserName : undefined,
-                  }));
+                  // Update only active items
+                  const updatedItems = items.map(i => {
+                    if (i.finalized_at) return i; // ignore finalized
+                    return {
+                      ...i,
+                      checked: !allChecked,
+                      checked_by: !allChecked ? user?.id || null : null,
+                      checked_at: !allChecked ? new Date().toISOString() : null,
+                      checked_by_name: !allChecked ? currentUserName || null : null,
+                      checkedBy: !allChecked ? currentUserName : undefined,
+                    };
+                  });
                   updateList(list.id, { items: updatedItems });
                 }}
                 className="text-[11px] font-bold px-2 py-1 rounded-md transition-colors"
                 style={{ color: 'var(--primary)', backgroundColor: 'var(--primary-fixed)', opacity: 0.9 }}
               >
-                {items.every(i => i.checked) ? 'Desmarcar Todos' : 'Marcar Todos'}
+                {activeItems.every(i => i.checked) ? 'Desmarcar Todos' : 'Marcar Todos'}
               </button>
               <span
                 className="text-[12px] font-semibold px-3 py-1 rounded-full"
                 style={{ backgroundColor: 'var(--surface-container)', color: 'var(--outline)' }}
               >
-                {items.length} {items.length === 1 ? 'item' : 'itens'}
+                {activeItems.length} {activeItems.length === 1 ? 'item' : 'itens'}
               </span>
             </div>
           </div>
         )}
 
         {/* === Budget strip === */}
-        <div
-          className="flex items-center justify-between p-5 rounded-3xl mb-4 mx-4"
-          style={{ backgroundColor: 'var(--primary)', boxShadow: 'var(--shadow-sm)' }}
-        >
-          <div className="flex flex-col">
-            <span className="text-[11px] font-semibold tracking-wider text-white/80 uppercase mb-0.5">
-              Total Gasto
-            </span>
-            <span className="text-[15px] font-bold text-white">
-              {formatCurrency(totalGasto)}
-            </span>
+        {activeTab === 'ativos' && (
+          <div
+            className="flex items-center justify-between p-5 rounded-3xl mb-4 mx-4"
+            style={{ backgroundColor: 'var(--primary)', boxShadow: 'var(--shadow-sm)' }}
+          >
+            <div className="flex flex-col">
+              <span className="text-[11px] font-semibold tracking-wider text-white/80 uppercase mb-0.5">
+                Total Gasto
+              </span>
+              <span className="text-[15px] font-bold text-white">
+                {formatCurrency(totalGasto)}
+              </span>
+            </div>
+            <div className="flex flex-col text-right">
+              <span className="text-[11px] font-semibold tracking-wider text-white/80 uppercase mb-0.5">
+                Orçamento
+              </span>
+              <span className="text-[15px] font-bold text-white">
+                {budget > 0 ? formatCurrency(budget) : 'Livre'}
+              </span>
+            </div>
           </div>
-          <div className="flex flex-col text-right">
-            <span className="text-[11px] font-semibold tracking-wider text-white/80 uppercase mb-0.5">
-              Orçamento
-            </span>
-            <span className="text-[15px] font-bold text-white">
-              {budget > 0 ? formatCurrency(budget) : 'Livre'}
-            </span>
-          </div>
-        </div>
+        )}
 
         {/* === EMPTY STATE === */}
-        {items.length === 0 ? (
+        {activeTab === 'ativos' && activeItems.length === 0 ? (
           <div className="flex flex-col items-center justify-center text-center py-16">
             <div
               className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
@@ -233,7 +273,7 @@ export const ListView: React.FC = () => {
             <h3 className="text-base font-bold mb-2" style={{ color: 'var(--on-surface)' }}>Lista vazia</h3>
             <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>Toque em + para adicionar o primeiro produto.</p>
           </div>
-        ) : (
+        ) : activeTab === 'ativos' ? (
           <div className="flex flex-col gap-5">
             {groupEntries.map(([category, catItems]) => (
               <div key={category}>
@@ -266,10 +306,38 @@ export const ListView: React.FC = () => {
               </div>
             ))}
           </div>
+        ) : (
+          <div className="flex flex-col gap-6">
+            {finalizedGroupEntries.length === 0 ? (
+              <div className="text-center py-10 text-[var(--text-muted)] text-sm">
+                Nenhum item finalizado ainda.
+              </div>
+            ) : (
+              finalizedGroupEntries.map(([date, dateItems]) => (
+                <div key={date}>
+                  <div className="text-sm font-bold text-[var(--text-muted)] mb-3 border-b border-[var(--border-color)] pb-1">
+                    {date}
+                  </div>
+                  <div className="flex flex-col gap-2 opacity-70">
+                    {dateItems.map(item => (
+                      <ItemCard
+                        key={item.id}
+                        item={item}
+                        listId={list.id}
+                        onToggle={() => {}} // Disabled for finalized
+                        onEdit={() => {}}   // Disabled for finalized
+                        onDelete={() => {}} // Disabled or maybe allow? Let's leave disabled for now
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         )}
 
         {/* === FINALIZAR / REABRIR === */}
-        {items.length > 0 && (
+        {activeTab === 'ativos' && activeItems.length > 0 && (
           <div className="mt-8 mb-4 flex flex-col gap-3">
             {list.status === 'concluida' ? (
               <>
@@ -290,6 +358,59 @@ export const ListView: React.FC = () => {
                 </button>
                 <p className="text-center text-[10px] text-on-surface-variant">
                   Ao reabrir, você pode continuar editando os itens.
+                </p>
+              </>
+            ) : list.list_type === 'continua' ? (
+              <>
+                <Button
+                  onClick={async () => {
+                    const checkedItemIds = activeItems.filter(i => i.checked).map(i => i.id);
+                    if (checkedItemIds.length > 0) {
+                      await finalizePartialList(list.id, checkedItemIds);
+                      // Continues open
+                    } else {
+                      alert('Selecione os itens que deseja finalizar.');
+                    }
+                  }}
+                  className="w-full h-14 font-black text-base shadow-lg hover:shadow-xl"
+                >
+                  Finalizar Parcial (Marcados)
+                </Button>
+                <p className="text-center text-[10px] text-[var(--on-surface-variant)]">
+                  Lança apenas os itens marcados na carteira e move para a aba Finalizados.
+                </p>
+
+                <button
+                  onClick={async () => {
+                    const confirm = window.confirm("Tem certeza que deseja encerrar esta lista contínua definitivamente? Os itens marcados ativos serão lançados na carteira e a lista não poderá mais receber novos itens.");
+                    if (!confirm) return;
+
+                    const checkedItemIds = activeItems.filter(i => i.checked).map(i => i.id);
+                    if (checkedItemIds.length > 0) {
+                      await finalizePartialList(list.id, checkedItemIds);
+                    }
+                    updateList(list.id, { status: 'concluida' });
+                    navigate('DASHBOARD');
+                  }}
+                  className="w-full mt-2 h-10 rounded-xl font-bold text-sm border-2 transition-all active:scale-95"
+                  style={{ borderColor: 'var(--error)', color: 'var(--error)' }}
+                >
+                  Encerrar Lista Definitivamente
+                </button>
+              </>
+            ) : list.list_type === 'rateada' ? (
+               <>
+                <Button
+                  onClick={async () => {
+                    await finalizeSplitList(list.id);
+                    navigate('DASHBOARD');
+                  }}
+                  className="w-full h-14 font-black text-base shadow-lg hover:shadow-xl"
+                >
+                  Encerrar Lista Rateada
+                </Button>
+                <p className="text-center text-[10px] text-[var(--on-surface-variant)]">
+                  Gera transações na carteira de todos os participantes.
                 </p>
               </>
             ) : (
@@ -315,7 +436,7 @@ export const ListView: React.FC = () => {
       {/* === FAB === */}
       <button
         onClick={() => setIsNovoItemOpen(true)}
-        className="fixed bottom-6 right-5 w-14 h-14 rounded-full flex items-center justify-center z-40 text-white transition-all active:scale-90 hover:shadow-2xl"
+        className="fixed bottom-24 right-5 w-14 h-14 rounded-full flex items-center justify-center z-40 text-white transition-all active:scale-90 hover:shadow-2xl"
         style={{
           background: 'linear-gradient(135deg, var(--primary) 0%, var(--primary-container) 100%)',
           boxShadow: 'var(--shadow-primary)',

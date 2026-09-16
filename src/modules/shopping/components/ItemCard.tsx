@@ -112,24 +112,35 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, listId, onToggle, onEd
           {/* Badges de autoria */}
           {(addedByName || checkedByName) && (
             <div className="flex items-center gap-1.5 flex-wrap mt-1">
-              {addedByName && (
-                <span
-                  className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded"
-                  style={{
-                    color: 'var(--on-surface-variant, #3d4a42)',
-                    backgroundColor: 'rgba(188,202,192,0.25)',
-                  }}
-                >
-                  + {addedByName}
-                </span>
-              )}
-              {item.checked && checkedByName && (
+              {addedByName === checkedByName && item.checked ? (
                 <span
                   className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded"
                   style={{ color: '#065f46', backgroundColor: 'rgba(16,185,129,0.1)' }}
                 >
-                  ✓ {checkedByName}
+                  + ✓ {addedByName}
                 </span>
+              ) : (
+                <>
+                  {addedByName && (
+                    <span
+                      className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded"
+                      style={{
+                        color: 'var(--on-surface-variant, #3d4a42)',
+                        backgroundColor: 'rgba(188,202,192,0.25)',
+                      }}
+                    >
+                      + {addedByName}
+                    </span>
+                  )}
+                  {item.checked && checkedByName && (
+                    <span
+                      className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded"
+                      style={{ color: '#065f46', backgroundColor: 'rgba(16,185,129,0.1)' }}
+                    >
+                      ✓ {checkedByName}
+                    </span>
+                  )}
+                </>
               )}
             </div>
           )}
