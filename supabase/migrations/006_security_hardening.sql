@@ -36,11 +36,15 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  -- Se owner_id está sendo alterado por um não-dono, rejeita
-  IF NEW.owner_id IS DISTINCT FROM OLD.owner_id THEN
-    IF auth.uid() != OLD.owner_id THEN
-      RAISE EXCEPTION 'Não é permitido alterar o proprietário da lista.'
-        USING ERRCODE = '42501'; -- permission denied
+  IF auth.uid() != OLD.owner_id THEN
+    IF NEW.owner_id IS DISTINCT FROM OLD.owner_id THEN
+      RAISE EXCEPTION 'Não é permitido alterar o proprietário da lista.' USING ERRCODE = '42501';
+    END IF;
+    IF NEW.shared_users IS DISTINCT FROM OLD.shared_users THEN
+      RAISE EXCEPTION 'Apenas o dono pode gerenciar o compartilhamento da lista.' USING ERRCODE = '42501';
+    END IF;
+    IF NEW.share_code IS DISTINCT FROM OLD.share_code THEN
+      RAISE EXCEPTION 'Apenas o dono pode alterar o código de compartilhamento.' USING ERRCODE = '42501';
     END IF;
   END IF;
   RETURN NEW;

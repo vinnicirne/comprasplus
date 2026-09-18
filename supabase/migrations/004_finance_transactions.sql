@@ -29,7 +29,8 @@ CREATE POLICY "Usuários podem inserir suas próprias transações"
 
 CREATE POLICY "Usuários podem atualizar suas próprias transações"
     ON public.finance_transactions FOR UPDATE
-    USING (auth.uid() = owner_id);
+    USING (auth.uid() = owner_id)
+    WITH CHECK (auth.uid() = owner_id);
 
 CREATE POLICY "Usuários podem deletar suas próprias transações"
     ON public.finance_transactions FOR DELETE

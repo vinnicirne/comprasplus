@@ -22,6 +22,10 @@ BEGIN
     RAISE EXCEPTION 'Não autenticado';
   END IF;
 
+  IF p_permission NOT IN ('view', 'edit') THEN
+    RAISE EXCEPTION 'Permissão inválida. Apenas view ou edit permitidos.';
+  END IF;
+
   SELECT * INTO v_list
   FROM public.shopping_lists
   WHERE share_code = p_share_code;
