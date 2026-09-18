@@ -160,6 +160,19 @@ export const useListStore = create<ListStoreState>((set, get) => ({
 
     const updatedItems = [...list.items, { ...item, addedBy: userTag }];
     state.updateList(listId, { items: updatedItems });
+
+    // Disparar notificação Push se for lista compartilhada
+    if (list.isShared && user) {
+      supabase.functions.invoke('send-push', {
+        body: {
+          listId: list.id,
+          senderId: user.id,
+          senderName: userTag?.name || 'Alguém',
+          itemName: item.name,
+          type: 'NEW_ITEM'
+        }
+      }).catch(console.error);
+    }
   },
 
   updateItem: (listId, itemId, data) => {

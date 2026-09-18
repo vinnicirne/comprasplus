@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1052225778682",
+    "project_id": "comprasplus-c2402",
+    "storage_bucket": "comprasplus-c2402.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1052225778682:android:5e6e863f7c97511d91ea43",
+        "android_client_info": {
+          "package_name": "br.com.comprasplus.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAUO8js6MP-fPdEiXAHCietmc5S_Xn1ods"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

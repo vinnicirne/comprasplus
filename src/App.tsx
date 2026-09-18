@@ -13,9 +13,21 @@ import { RankingView } from './modules/ranking/views/RankingView';
 import { SplashScreen } from './core/components/SplashScreen';
 import { useState } from 'react';
 
+import { NotificationListener } from './core/components/NotificationListener';
+import { setupCapacitorPush } from './core/services/capacitorPush';
+import { requestWebPushPermission } from './core/services/webPush';
+import { useEffect } from 'react';
+
 function AppContent() {
   const currentView = useNavigationStore(state => state.currentView);
   const user = useAuthStore(state => state.user);
+
+  useEffect(() => {
+    if (user) {
+      setupCapacitorPush(user.id);
+      requestWebPushPermission(user.id);
+    }
+  }, [user]);
 
   if (!user) {
     return <LoginView />;
@@ -23,6 +35,7 @@ function AppContent() {
 
   return (
     <AppLayout>
+      <NotificationListener userId={user.id} />
       {currentView === 'DASHBOARD' && <DashboardView />}
       {currentView === 'LIST' && <ListView />}
       {currentView === 'FINANCE' && <FinanceView />}
