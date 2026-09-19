@@ -17,7 +17,6 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { NotificationListener } from './core/components/NotificationListener';
 import { setupCapacitorPush } from './core/services/capacitorPush';
 import { requestWebPushPermission } from './core/services/webPush';
-import { useEffect } from 'react';
 
 function AppContent() {
   const currentView = useNavigationStore(state => state.currentView);
