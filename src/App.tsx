@@ -11,7 +11,8 @@ import { HistoryView } from './modules/history/views/HistoryView';
 import { ProfileView } from './modules/profile/views/ProfileView';
 import { RankingView } from './modules/ranking/views/RankingView';
 import { SplashScreen } from './core/components/SplashScreen';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { App as CapacitorApp } from '@capacitor/app';
 
 import { NotificationListener } from './core/components/NotificationListener';
 import { setupCapacitorPush } from './core/services/capacitorPush';
@@ -27,6 +28,20 @@ function AppContent() {
       setupCapacitorPush(user.id);
       requestWebPushPermission(user.id);
     }
+
+    // Trava o botão Voltar (hardware back button no Android)
+    const backButtonListener = CapacitorApp.addListener('backButton', () => {
+      const state = useNavigationStore.getState();
+      // Se não estiver na tela principal, volta para ela
+      if (state.currentView !== 'DASHBOARD') {
+        state.navigate('DASHBOARD');
+      }
+      // Se estiver no DASHBOARD, o botão não fará nada (trava a saída do app)
+    });
+
+    return () => {
+      backButtonListener.then(listener => listener.remove());
+    };
   }, [user]);
 
   if (!user) {

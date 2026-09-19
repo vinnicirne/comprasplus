@@ -26,7 +26,7 @@ const log = {
 const SYNC_QUEUE_KEY = '@compras_plus:sync_queue';
 
 class SyncEngine {
-  private isProcessing = false;
+  public isProcessing = false;
 
   private getQueue(): SyncOperation[] {
     try {

@@ -95,6 +95,13 @@ export const useListStore = create<ListStoreState>((set, get) => ({
   setSearchQuery: (searchQuery) => set({ searchQuery }),
   
   fetchLists: async () => {
+    // Se o motor de sincronização estiver processando, não buscamos dados novos do servidor 
+    // para evitar que o servidor mande um status velho antes do update chegar lá.
+    if (syncEngine.isProcessing) {
+      console.log('Skipping fetchLists because SyncEngine is processing a local update.');
+      return;
+    }
+
     set({ isLoading: true });
     try {
       const { data, error } = await supabase
