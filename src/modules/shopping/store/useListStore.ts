@@ -104,7 +104,31 @@ export const useListStore = create<ListStoreState>((set, get) => ({
         
       if (error) throw error;
       if (data) {
-        set({ lists: data as ShoppingList[] });
+        let mergedLists = data as ShoppingList[];
+        
+        try {
+          const q = localStorage.getItem('@compras_plus:sync_queue');
+          if (q) {
+            const queue = JSON.parse(q);
+            for (const op of queue) {
+              if (op.table === 'shopping_lists') {
+                if (op.type === 'UPDATE') {
+                  mergedLists = mergedLists.map(l => l.id === op.record_id ? { ...l, ...op.payload } : l);
+                } else if (op.type === 'INSERT') {
+                  if (!mergedLists.find(l => l.id === op.record_id)) {
+                    mergedLists.push(op.payload);
+                  }
+                } else if (op.type === 'DELETE') {
+                  mergedLists = mergedLists.filter(l => l.id !== op.record_id);
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.error('Erro ao aplicar queue local:', e);
+        }
+
+        set({ lists: mergedLists });
       }
     } catch (error) {
       console.error('Error fetching lists:', error);
