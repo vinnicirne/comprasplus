@@ -5,11 +5,6 @@ import { useAuthStore } from './modules/auth/store/useAuthStore';
 import { ListView } from './modules/shopping/views/ListView';
 import { LoginView } from './modules/auth/views/LoginView';
 import { AppLayout } from './modules/shell/components/AppLayout';
-import { FinanceView } from './modules/finance/views/FinanceView';
-import { ReportsView } from './modules/reports/views/ReportsView';
-import { HistoryView } from './modules/history/views/HistoryView';
-import { ProfileView } from './modules/profile/views/ProfileView';
-import { RankingView } from './modules/ranking/views/RankingView';
 import { SplashScreen } from './core/components/SplashScreen';
 import { useState, useEffect } from 'react';
 import { App as CapacitorApp } from '@capacitor/app';
@@ -52,11 +47,6 @@ function AppContent() {
       <NotificationListener userId={user.id} />
       {currentView === 'DASHBOARD' && <DashboardView />}
       {currentView === 'LIST' && <ListView />}
-      {currentView === 'FINANCE' && <FinanceView />}
-      {currentView === 'REPORTS' && <ReportsView />}
-      {currentView === 'HISTORY' && <HistoryView />}
-      {currentView === 'PROFILE' && <ProfileView />}
-      {currentView === 'RANKING' && <RankingView />}
     </AppLayout>
   );
 }

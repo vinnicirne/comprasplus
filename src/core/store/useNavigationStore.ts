@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type AppView = 'DASHBOARD' | 'LIST' | 'FINANCE' | 'REPORTS' | 'HISTORY' | 'PROFILE' | 'ADMIN' | 'RANKING';
+export type AppView = 'DASHBOARD' | 'LIST' | 'ADMIN';
 
 interface NavigationState {
   currentView: AppView;
