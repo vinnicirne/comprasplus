@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X, Copy, Share2, Check, Smartphone } from 'lucide-react';
 import { Button } from '../../../../core/components/ui/Button';
 import { supabase } from '../../../../core/lib/supabase';
+import { useListStore } from '../../store/useListStore';
 
 interface ShareListModalProps {
   open: boolean;
@@ -23,21 +24,36 @@ export const ShareListModal: React.FC<ShareListModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [permission, setPermission] = useState<'view' | 'edit'>('edit');
+  const [errorMessage, setErrorMessage] = useState('');
+
+  useEffect(() => {
+    if (open) {
+      setShareCode(initialShareCode || '');
+      setErrorMessage('');
+    }
+  }, [initialShareCode, open]);
 
   const generateCode = async () => {
     setIsLoading(true);
+    setErrorMessage('');
     try {
-      // Simulated random code generation
       const newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
       
-      // TODO: Save share_code and default permission to Supabase
-      await supabase.from('shopping_lists').update({
+      const { error } = await supabase.from('shopping_lists').update({
         share_code: newCode
       }).eq('id', listId);
 
+      if (error) {
+        console.error('Erro ao salvar share_code no Supabase:', error);
+        setErrorMessage('Não foi possível salvar o código no servidor: ' + (error.message || error.code));
+        return;
+      }
+
+      useListStore.getState().updateList(listId, { share_code: newCode });
       setShareCode(newCode);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
+      setErrorMessage('Erro inesperado ao gerar código.');
     } finally {
       setIsLoading(false);
     }
@@ -97,6 +113,9 @@ export const ShareListModal: React.FC<ShareListModalProps> = ({
                 >
                   Gerar Código de Convite
                 </Button>
+                {errorMessage && (
+                  <p className="text-sm text-error text-center font-medium mt-2">{errorMessage}</p>
+                )}
               </div>
             ) : (
               <>

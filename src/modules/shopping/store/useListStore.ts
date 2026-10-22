@@ -52,6 +52,8 @@ export interface ShoppingList {
   owner_id: string;
   owner_name?: string;
   isShared?: boolean;
+  share_code?: string;
+  shared_users?: Array<{ id: string; permission: 'view' | 'edit'; name?: string }>;
 }
 
 interface ListStoreState {
@@ -64,6 +66,7 @@ interface ListStoreState {
   setFilter: (filter: 'TODAS' | 'ATIVAS' | 'PENDENTES' | 'CONCLUIDAS') => void;
   setSearchQuery: (query: string) => void;
   addList: (list: ShoppingList) => void;
+  addJoinedList: (list: ShoppingList) => void;
   updateList: (id: string, data: Partial<ShoppingList>) => void;
   deleteList: (id: string) => void;
   setLoading: (isLoading: boolean) => void;
@@ -151,6 +154,19 @@ export const useListStore = create<ListStoreState>((set, get) => ({
       type: 'INSERT',
       record_id: list.id,
       payload: list
+    });
+  },
+  addJoinedList: (list) => {
+    set((state) => {
+      const exists = state.lists.some(l => l.id === list.id);
+      if (exists) {
+        return {
+          lists: state.lists.map(l => l.id === list.id ? { ...l, ...list, isShared: true } : l)
+        };
+      }
+      return {
+        lists: [{ ...list, isShared: true }, ...state.lists]
+      };
     });
   },
   updateList: (id, data) => {

@@ -459,7 +459,7 @@ export const ListView: React.FC = () => {
         onOpenChange={setIsShareModalOpen}
         listId={list.id}
         listName={list.name}
-        shareCode={(list as any).share_code}
+        shareCode={list.share_code}
       />
 
       <ConfirmDialog

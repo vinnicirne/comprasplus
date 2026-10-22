@@ -16,12 +16,13 @@ export const ConnectCodeModal: React.FC<ConnectCodeModalProps> = ({ open, onOpen
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [permission, setPermission] = useState<'view' | 'edit'>('edit');
-  const { addList } = useListStore();
+  const { addJoinedList, fetchLists } = useListStore();
   const { user } = useAuthStore();
   const { navigate } = useNavigationStore();
 
   const handleConnect = async () => {
-    if (code.trim().length < 4) {
+    const cleanCode = code.trim().toUpperCase();
+    if (cleanCode.length < 4) {
       setError('Digite um código válido.');
       return;
     }
@@ -32,28 +33,40 @@ export const ConnectCodeModal: React.FC<ConnectCodeModalProps> = ({ open, onOpen
       // 1. Chamar a RPC segura que adiciona o usuário à lista (bypassing RLS do SELECT)
       const { data: list, error: rpcError } = await supabase
         .rpc('join_shopping_list', {
-          p_share_code: code.trim().toUpperCase(),
+          p_share_code: cleanCode,
           p_permission: permission,
           p_user_name: user?.user_metadata?.name || user?.email || 'Visitante'
         });
 
       if (rpcError || !list) {
-        setError('Código não encontrado. Verifique e tente novamente.');
+        console.error('RPC Error ao conectar:', rpcError);
+        const errMsg = rpcError?.message;
+        if (!errMsg || errMsg === 'Código não encontrado' || errMsg.toLowerCase().includes('not found')) {
+          setError('Código não encontrado. Verifique o código com quem compartilhou.');
+        } else if (errMsg.includes('Não autenticado')) {
+          setError('Sua sessão expirou ou você não está logado. Faça login novamente.');
+        } else {
+          setError(errMsg);
+        }
         setIsLoading(false);
         return;
       }
 
-      // 3. Add list to local store and navigate
-      addList({
+      // 2. Add list to local store without queuing duplicate INSERT
+      addJoinedList({
         ...list,
         items: list.items || [],
+        isShared: true,
       });
+
+      // 3. Atualiza listas do servidor em background
+      fetchLists();
 
       onOpenChange(false);
       setCode('');
       navigate('LIST', list.id);
-    } catch (err) {
-      setError('Ocorreu um erro. Tente novamente.');
+    } catch (err: any) {
+      setError(err?.message || 'Ocorreu um erro. Tente novamente.');
       console.error(err);
     } finally {
       setIsLoading(false);
